@@ -1,0 +1,27 @@
+{
+  "timestamp": "2025-10-02T19:05:56.393184",
+  "throughput": {
+    "transactions_completed": 12500,
+    "duration_seconds": 6.25,
+    "tps_achieved": 2000.0,
+    "tps_target": 12500,
+    "target_achievement_percent": 16.0
+  },
+  "latency": {
+    "average_ms": 2.8821536173690574,
+    "p95_ms": 4.603903717781819,
+    "p99_ms": 4.903549915759295,
+    "target_ms": 100,
+    "target_achieved": true
+  },
+  "scalability": {
+    "max_concurrent_users": 50000,
+    "max_tps": 4761.9047619047615,
+    "linear_scaling": true
+  },
+  "gas_efficiency": {
+    "avg_gas_per_transaction": 229975.0,
+    "total_gas_used": 2874687500,
+    "cost_per_transaction_usd": 9.199
+  }
+}

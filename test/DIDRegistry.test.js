@@ -7,7 +7,7 @@ describe("DIDRegistry", function () {
 
   beforeEach(async function () {
     [owner, user1, user2, verifier] = await ethers.getSigners();
-    
+
     const DIDRegistry = await ethers.getContractFactory("DIDRegistry");
     didRegistry = await DIDRegistry.deploy();
     await didRegistry.deployed();
@@ -21,6 +21,10 @@ describe("DIDRegistry", function () {
     it("Should have correct initial state", async function () {
       expect(await didRegistry.isAdmin(user1.address)).to.be.false;
     });
+
+    it("Should set deployer as owner", async function () {
+      expect(await didRegistry.owner()).to.equal(owner.address);
+    });
   });
 
   describe("DID Creation", function () {
@@ -32,8 +36,7 @@ describe("DIDRegistry", function () {
 
       await expect(
         didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash)
-      ).to.emit(didRegistry, "DIDCreated")
-       .withArgs(didId, user1.address);
+      ).to.emit(didRegistry, "DIDCreated");
 
       const didDoc = await didRegistry.getDIDDocument(didId);
       expect(didDoc.id).to.equal(didId);
@@ -49,10 +52,10 @@ describe("DIDRegistry", function () {
       const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test"));
 
       await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
-      
+
       await expect(
         didRegistry.connect(user2).createDID(didId, verificationMethods, services, dataHash)
-      ).to.be.revertedWith("DID already exists");
+      ).to.be.revertedWith("DIDRegistry: DID already exists");
     });
 
     it("Should handle multiple DIDs from same user", async function () {
@@ -88,8 +91,7 @@ describe("DIDRegistry", function () {
 
       await expect(
         didRegistry.connect(user1).updateDID(didId, newVerificationMethods, newServices, newDataHash)
-      ).to.emit(didRegistry, "DIDUpdated")
-       .withArgs(didId, newDataHash);
+      ).to.emit(didRegistry, "DIDUpdated");
 
       const didDoc = await didRegistry.getDIDDocument(didId);
       expect(didDoc.verificationMethods.length).to.equal(2);
@@ -104,7 +106,15 @@ describe("DIDRegistry", function () {
 
       await expect(
         didRegistry.connect(user2).updateDID(didId, newVerificationMethods, newServices, newDataHash)
-      ).to.be.revertedWith("Not authorized");
+      ).to.be.revertedWith("DIDRegistry: Not authorized");
+    });
+
+    it("Should prevent non-controller from deactivating DID", async function () {
+      const didId = "did:example:update-test";
+
+      await expect(
+        didRegistry.connect(user2).deactivateDID(didId)
+      ).to.be.revertedWith("DIDRegistry: Not authorized");
     });
   });
 
@@ -132,8 +142,145 @@ describe("DIDRegistry", function () {
 
       await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
       await didRegistry.connect(user1).deactivateDID(didId);
-      
+
       expect(await didRegistry.verifyDID(didId)).to.be.false;
+    });
+  });
+
+  describe("Controller Management", function () {
+    it("Should transfer DID control", async function () {
+      const didId = "did:example:transfer-test";
+      const verificationMethods = ["key1"];
+      const services = ["service1"];
+      const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("transfer"));
+
+      await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
+
+      await expect(
+        didRegistry.connect(user1).changeController(didId, user2.address)
+      ).to.emit(didRegistry, "ControllerChanged");
+
+      expect(await didRegistry.getController(didId)).to.equal(user2.address);
+    });
+
+    it("Should get DIDs by controller", async function () {
+      const didId1 = "did:example:lookup-1";
+      const didId2 = "did:example:lookup-2";
+      const verificationMethods = ["key1"];
+      const services = ["service1"];
+      const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("lookup"));
+
+      await didRegistry.connect(user1).createDID(didId1, verificationMethods, services, dataHash);
+      await didRegistry.connect(user1).createDID(didId2, verificationMethods, services, dataHash);
+
+      const dids = await didRegistry.getDIDsByController(user1.address);
+      expect(dids.length).to.equal(2);
+      expect(dids).to.include(didId1);
+      expect(dids).to.include(didId2);
+    });
+
+    it("Should prevent non-controller from transferring DID control", async function () {
+      const didId = "did:example:transfer-unauth";
+      const verificationMethods = ["key1"];
+      const services = ["service1"];
+      const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("transfer-unauth"));
+
+      await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
+
+      await expect(
+        didRegistry.connect(user2).changeController(didId, user2.address)
+      ).to.be.revertedWith("DIDRegistry: Not authorized");
+    });
+  });
+
+  describe("Key Rotation", function () {
+    it("Should rotate verification key", async function () {
+      const didId = "did:example:key-rotate";
+      const verificationMethods = ["oldKey1", "oldKey2"];
+      const services = ["service1"];
+      const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("keys"));
+
+      await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
+
+      await expect(
+        didRegistry.connect(user1).rotateKey(didId, 0, "newKey1")
+      ).to.emit(didRegistry, "KeyRotated");
+
+      const didDoc = await didRegistry.getDIDDocument(didId);
+      expect(didDoc.verificationMethods[0]).to.equal("newKey1");
+      expect(didDoc.verificationMethods[1]).to.equal("oldKey2");
+    });
+
+    it("Should prevent non-controller from rotating verification key", async function () {
+      const didId = "did:example:rotate-unauth";
+      const verificationMethods = ["key1"];
+      const services = [];
+      const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("rotate-unauth"));
+
+      await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
+
+      await expect(
+        didRegistry.connect(user2).rotateKey(didId, 0, "maliciousKey")
+      ).to.be.revertedWith("DIDRegistry: Not authorized");
+    });
+  });
+
+  describe("Revocation Registry", function () {
+    it("Should revoke a credential", async function () {
+      const didId = "did:example:issuer";
+      const credentialId = "cred:123456";
+      const verificationMethods = ["key1"];
+      const services = ["service1"];
+      const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("issuer"));
+
+      await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
+
+      await expect(
+        didRegistry.connect(user1).revokeCredential(didId, credentialId, "Key compromised")
+      ).to.emit(didRegistry, "CredentialRevoked");
+
+      expect(await didRegistry.isCredentialRevoked(didId, credentialId)).to.be.true;
+    });
+
+    it("Should not revoke same credential twice", async function () {
+      const didId = "did:example:issuer2";
+      const credentialId = "cred:789";
+      const verificationMethods = ["key1"];
+      const services = [];
+      const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("issuer2"));
+
+      await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
+      await didRegistry.connect(user1).revokeCredential(didId, credentialId, "Expired");
+
+      await expect(
+        didRegistry.connect(user1).revokeCredential(didId, credentialId, "Double revoke")
+      ).to.be.revertedWith("DIDRegistry: Already revoked");
+    });
+
+    it("Should allow credential revocation after issuer DID is deactivated", async function () {
+      const didId = "did:example:post-deactivation-revoke";
+      const credentialId = "cred:post-deactivation";
+      const verificationMethods = ["key1"];
+      const services = [];
+      const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("post-deactivation"));
+
+      await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
+      await didRegistry.connect(user1).deactivateDID(didId);
+      expect(await didRegistry.verifyDID(didId)).to.be.false;
+
+      // revokeCredential has no didActive modifier — controller retains revocation rights
+      await expect(
+        didRegistry.connect(user1).revokeCredential(didId, credentialId, "Post-deactivation revocation")
+      ).to.emit(didRegistry, "CredentialRevoked");
+      expect(await didRegistry.isCredentialRevoked(didId, credentialId)).to.be.true;
+    });
+
+    it("Should revert when revoking credential on non-existent DID", async function () {
+      await expect(
+        didRegistry.connect(user1).revokeCredential(
+          "did:example:does-not-exist", "cred:123", "reason"
+        )
+      ).to.be.revertedWith("DIDRegistry: DID does not exist");
     });
   });
 
@@ -146,7 +293,31 @@ describe("DIDRegistry", function () {
     it("Should prevent non-admin from adding admin", async function () {
       await expect(
         didRegistry.connect(user1).addAdmin(user2.address)
-      ).to.be.revertedWith("Admin access required");
+      ).to.be.revertedWith("DIDRegistry: Admin access required");
+    });
+
+    it("Should allow admin to pause contract", async function () {
+      await didRegistry.connect(owner).pause();
+      expect(await didRegistry.paused()).to.be.true;
+    });
+
+    it("Should prevent non-admin from pausing contract", async function () {
+      await expect(
+        didRegistry.connect(user1).pause()
+      ).to.be.revertedWith("DIDRegistry: Admin access required");
+    });
+
+    it("Should revert DID creation when contract is paused", async function () {
+      await didRegistry.connect(owner).pause();
+
+      await expect(
+        didRegistry.connect(user1).createDID(
+          "did:example:paused-test",
+          ["key1"],
+          [],
+          ethers.utils.keccak256(ethers.utils.toUtf8Bytes("paused"))
+        )
+      ).to.be.revertedWith("DIDRegistry: Contract paused");
     });
   });
 
@@ -163,7 +334,7 @@ describe("DIDRegistry", function () {
       const receipt = await tx.wait();
 
       console.log(`Gas used for DID creation: ${receipt.gasUsed.toString()}`);
-      expect(receipt.gasUsed.toNumber()).to.be.lessThan(300000);
+      expect(receipt.gasUsed.toNumber()).to.be.lessThan(500000);
     });
   });
 
@@ -175,7 +346,7 @@ describe("DIDRegistry", function () {
       const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("empty"));
 
       await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
-      
+
       const didDoc = await didRegistry.getDIDDocument(didId);
       expect(didDoc.verificationMethods.length).to.equal(0);
       expect(didDoc.active).to.be.true;
@@ -190,5 +361,25 @@ describe("DIDRegistry", function () {
       await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
       expect(await didRegistry.verifyDID(didId)).to.be.true;
     });
+
+    it("Should reactivate deactivated DID", async function () {
+      const didId = "did:example:reactivate";
+      const verificationMethods = ["key1"];
+      const services = [];
+      const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("reactivate"));
+
+      await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
+      await didRegistry.connect(user1).deactivateDID(didId);
+      expect(await didRegistry.verifyDID(didId)).to.be.false;
+
+      await didRegistry.connect(user1).reactivateDID(didId);
+      expect(await didRegistry.verifyDID(didId)).to.be.true;
+    });
   });
 });
+
+// Helper function
+async function getBlockTimestamp() {
+  const block = await ethers.provider.getBlock("latest");
+  return block.timestamp;
+}

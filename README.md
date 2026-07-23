@@ -1,12 +1,10 @@
-# DID-Anchored Verifiable Credentials with On-Chain Revocation
+# Decentralised Identifier-Anchored Verifiable Credentials with On-Chain Revocation for Social Media Identity Management
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21515958.svg)](https://doi.org/10.5281/zenodo.21515958)
 
 Archived release: **https://doi.org/10.5281/zenodo.21515958**
 
-Reference implementation accompanying the paper:
-
-> **Decentralised Identifier-Anchored Verifiable Credentials with On-Chain Revocation for Social Media Identity Management** (2026)
+Reference implementation accompanying the 2026 paper of the same title.
 
 This repository contains the Ethereum smart contract, the Node.js credential
 service, and the test suite for a W3C-standards-aligned Decentralised Identifier

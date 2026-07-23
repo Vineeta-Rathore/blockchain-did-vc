@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it using the metadata below."
-title: "DID-Anchored Verifiable Credentials with On-Chain Revocation for Social Media Identity Management"
+title: "Decentralised Identifier-Anchored Verifiable Credentials with On-Chain Revocation for Social Media Identity Management"
 abstract: >-
   Reference implementation of a W3C-standards-aligned decentralised identity
   and verifiable credential system with controller-enforced on-chain
@@ -14,7 +14,7 @@ authors:
     orcid: "https://orcid.org/0009-0007-7531-9445"
     affiliation: "Department of Computer Science and Engineering, Medicaps University, Indore, India"
   - family-names: Rawat
-    given-names: "Manoj Kumar"
+    given-names: Manoj Kumar
     orcid: "https://orcid.org/0000-0003-4158-9782"
     affiliation: "Department of Computer Science and Engineering, Medicaps University, Indore, India"
 license: MIT

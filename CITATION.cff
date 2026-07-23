@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "DID-Anchored Verifiable Credentials with On-Chain Revocation for Social Media Identity Management"
+abstract: >-
+  Reference implementation of a W3C-standards-aligned decentralised identity
+  and verifiable credential system with controller-enforced on-chain
+  revocation: an Ethereum Solidity DID registry, a Node.js credential service
+  (eddsa-jcs-2022 Data Integrity, Ed25519 Multikey), and an eight-step
+  verification pipeline, with a 47-test suite.
+type: software
+authors:
+  - family-names: Rathore
+    given-names: Vineeta
+    orcid: "https://orcid.org/0009-0007-7531-9445"
+    affiliation: "Department of Computer Science and Engineering, Medicaps University, Indore, India"
+  - family-names: Rawat
+    given-names: "Manoj Kumar"
+    orcid: "https://orcid.org/0000-0003-4158-9782"
+    affiliation: "Department of Computer Science and Engineering, Medicaps University, Indore, India"
+license: MIT
+doi: "10.5281/zenodo.21515958"
+repository-code: "https://github.com/Vineeta-Rathore/blockchain-did-vc"
+version: "1.0.0"
+date-released: "2026-07-24"
+keywords:
+  - "decentralised identifiers"
+  - "verifiable credentials"
+  - "self-sovereign identity"
+  - "on-chain revocation"
+  - "Ethereum"
+  - "smart contracts"
+  - "Ed25519"
+  - "eddsa-jcs-2022"

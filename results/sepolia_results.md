@@ -1,6 +1,6 @@
 # Sepolia Public-Network Results (2026-07-21)
 Canonical 618-line DIDRegistry (reproduces paper gas exactly), deployed and
-measured on the public Sepolia testnet. Raw: impl/build/did2_sepolia.jsonl.
+measured on the public Sepolia testnet. Raw: did2_sepolia.jsonl.
 
 ## Gas determinism — Sepolia == paper's local numbers (exact)
 | Operation (canonical inputs) | Local (paper) | Sepolia | diff |
@@ -34,4 +34,4 @@ These are the four on-chain reads that the verification pipeline performs.
 - DIDRegistry contract: `0x5f9017208f3F4A97657E2b32BE433a2641DFEF07`
 - createDID (346,878): tx `0xd48ae9684cda...`
 - revokeCredential (171,188): tx `0xe6262ae0f0fb...`
-- (full hashes in impl/build/did2_sepolia.jsonl)
+- (full hashes in did2_sepolia.jsonl)

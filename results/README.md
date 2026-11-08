@@ -17,7 +17,7 @@ seeded bootstrap only for paired speed-ups.
 
 From `npx hardhat run scripts/measure-gas.js`:
 
-| Operation | Realistic documents | R1 placeholder inputs | Version 1.0.0 |
+| Operation | Realistic documents | Version 1.0.0 placeholder inputs | Version 1.0.0 |
 |---|---|---|---|
 | Deployment | 2,838,630 | | 2,802,701 (Sepolia, July) |
 | `createDID`, a controller's first DID | 863,141 | 346,790 | 346,878 |
@@ -40,7 +40,7 @@ first run (sequential reads) is not part of this artifact; it used the client li
 each read was preceded by a chain-ID request and held for the library's 10 ms batching delay. The script of the second
 run (parallelised reads) was not kept.
 
-| Statistic | R1 definition | Definition used from version 1.1.0 |
+| Statistic | As first reported | Definitions of version 1.1.0 |
 |---|---|---|
 | Sequential reads, median (n = 20) | 649.2 ms (the upper of the two middle values) | 646.8 ms |
 | Sequential reads, "95th percentile" | 802.2 ms (the largest of 20 values) | 778.2 ms (nearest rank) |

@@ -269,7 +269,7 @@ describe('DID and VC credential flow', function () {
     }
   });
 
-  describe('validity period (R1.3)', function () {
+  describe('validity period', function () {
     it('fails with CREDENTIAL_NOT_YET_VALID when validFrom is beyond the clock tolerance', async function () {
       const credential = issueCredential({ validFrom: new Date(Date.now() + 10 * 60 * 1000).toISOString() });
       expect((await verifierService.verifyCredential(credential)).reason).to.equal('CREDENTIAL_NOT_YET_VALID');
@@ -411,7 +411,7 @@ describe('DID and VC credential flow', function () {
     });
   });
 
-  describe('eddsa-jcs-2022 (D11)', function () {
+  describe('eddsa-jcs-2022 proofs', function () {
     const vector = require('./fixtures/eddsa-jcs-2022-B3.json');
 
     it('reproduces the W3C test vector (B.3) and verifies it', function () {

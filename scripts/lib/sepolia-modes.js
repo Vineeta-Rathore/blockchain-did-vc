@@ -1,4 +1,4 @@
-// The four measurement modes of plan D1-B. Each read is an eth_call pinned to one block (same-block reads).
+// The four measurement modes of scripts/measure-sepolia.js. Each read is an eth_call pinned to one block (same-block reads).
 //   P   full verification pipeline (the verifier reads the block number itself, step B0, inside the timer)
 //   S   the four reads in sequence          (block number read just before the timer)
 //   C   the four reads at once, as four HTTP requests

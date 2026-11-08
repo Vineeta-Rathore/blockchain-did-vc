@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Statistics for a latency log (plan D1; definitions in scripts/lib/stats.js).
+ * Statistics for a latency log (definitions in scripts/lib/stats.js).
  *
  *   node scripts/analyze-latency.js <log.jsonl> [--out <summary.json>]
  *
  * Understands three logs:
- *   - the July 2026 Sepolia log (records "latency" and "latency_parallel"), also with the R1 ("July-style") values;
+ *   - the July 2026 Sepolia log (records "latency" and "latency_parallel"), also with the values as first reported ("July-style");
  *   - measure-local.js logs (rows with kind "local");
  *   - measure-sepolia.js logs (rows with kind "sepolia" and "cache_check").
  * Warm-up rows are excluded. Reads only the log; never contacts a network.
@@ -54,7 +54,7 @@ function analyzeJuly(rows) {
   const b = j.run1_bootstrapUpperMedian_5seeds.map((x) => `[${r1(x.lower)}, ${r1(x.upper)}]`);
   const lines = [
     out.log,
-    `July-style (R1): sequential upper median ${r1(j.run1_upperMedian)} ms; "p95" ${r1(j.run1_p95ByIndex)} ms (the maximum); ` +
+    `July-style (as first reported): sequential upper median ${r1(j.run1_upperMedian)} ms; "p95" ${r1(j.run1_p95ByIndex)} ms (the maximum); ` +
       `parallel upper median ${r1(j.run2_parallel_upperMedian)} ms; bootstrap of the upper median ${b[0]} ms ` +
       `(seeds 1-5: ${b.join(' ')}); cross-run speed-up ${r2(j.crossRunSpeedup)}`,
     `Conventional: sequential median ${r1(out.run1_sequential.median)} ms, order-statistic interval ` +

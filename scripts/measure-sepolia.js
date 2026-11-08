@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Sepolia verification latency (plan D1-B). Plain Node, no signer, read-only. Reads only SEPOLIA_RPC_URL (from the
+ * Sepolia verification latency. Plain Node, no signer, read-only. Reads only SEPOLIA_RPC_URL (from the
  * environment or one line of --env <file>) and stops if it is missing.
  *
  *   node scripts/measure-sepolia.js --deployment results/sepolia_v1.1_deployment.json --log <log.jsonl> --env <file>

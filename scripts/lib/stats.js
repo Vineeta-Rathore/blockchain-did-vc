@@ -1,10 +1,10 @@
-// Statistics used for every latency figure (plan D1). Each definition lives here once.
+// Statistics used for every latency figure. Each definition lives here once.
 //   median          conventional: the middle value, or the mean of the two middle values when n is even
 //   q1, q3          Hyndman and Fan type 7 (numpy's default "linear" method)
 //   p95             nearest rank: the ceil(0.95 n)-th smallest value (numpy method="inverted_cdf")
 //   medianCI        distribution-free interval for the median from order statistics (exact binomial)
 //   bootstrap       percentile bootstrap with a seeded generator (used only for paired speed-ups)
-// The "July-style" functions reproduce the definitions used in the R1 paper, for comparison only.
+// The "July-style" functions reproduce the definitions behind the July 2026 figures as first reported, for comparison only.
 
 function sorted(values) {
   return [...values].sort((a, b) => a - b);
@@ -121,7 +121,7 @@ function pairedRatio(a, b, options) {
   };
 }
 
-// R1 ("July-style") definitions, used only to show how the R1 values arose.
+// "July-style" definitions, used only to show how the July 2026 figures as first reported arose.
 const julyStyle = {
   upperMedian: (values) => sorted(values)[Math.floor(values.length / 2)],
   p95ByIndex: (values) => sorted(values)[Math.floor(values.length * 0.95)],

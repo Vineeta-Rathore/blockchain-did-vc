@@ -40,6 +40,18 @@ function didDocumentInputs({ didId, publicKeyMultibase, withService }) {
   };
 }
 
+// The seeded inputs of scripts/measure-gas.js (case 1) and test/GasSchedule.test.js.
+function seededGasInputs() {
+  const issuerDid = seededDidId('issuer');
+  const subjectDid = seededDidId('subject');
+  return {
+    issuer: didDocumentInputs({ didId: issuerDid, publicKeyMultibase: seededPublicKeyMultibase('issuer'), withService: true }),
+    subject: didDocumentInputs({ didId: subjectDid, publicKeyMultibase: seededPublicKeyMultibase('subject'), withService: false }),
+    credentialId: 'urn:uuid:5f0c2b9e-8d47-4c3a-9b61-2e7d4a8f1c03',
+    reasonCode: 9,
+  };
+}
+
 function randomCredentialId() {
   return `urn:uuid:${crypto.randomUUID()}`;
 }
@@ -49,5 +61,6 @@ module.exports = {
   randomCredentialId,
   randomDidId,
   seededDidId,
+  seededGasInputs,
   seededPublicKeyMultibase,
 };

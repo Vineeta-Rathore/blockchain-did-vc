@@ -1,4 +1,4 @@
-// Network helpers for the Sepolia scripts (SOP section 0, secrets rules).
+// Network helpers for the Sepolia scripts, with the rules for secrets:
 // - The RPC URL is read from SEPOLIA_RPC_URL or from one line of a given env file; nothing else in that file is read.
 // - Every string a script writes passes through redact(), which removes the URL's userinfo, path and query.
 // - Errors are reduced to codes; error.message, error.url, error.body and error.stack are never written.

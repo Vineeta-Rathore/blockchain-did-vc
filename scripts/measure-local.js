@@ -1,5 +1,5 @@
 /**
- * Local verification latency (plan D1-L): the full verification pipeline against the Hardhat in-process network.
+ * Local verification latency: the full verification pipeline against the Hardhat in-process network.
  * One process = 10 warm-up and 20 timed verifications of one valid credential; run it five times as separate
  * processes for n = 100. Every timed and warm-up row is appended to the log (warm-up rows are flagged).
  *

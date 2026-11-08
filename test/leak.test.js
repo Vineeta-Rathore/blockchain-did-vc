@@ -1,4 +1,4 @@
-// Leak tests (SOP gate): a local server at http://127.0.0.1:<port>/v3/<fake-token> answers HTTP 429, HTTP 500, a
+// Leak tests: a local server at http://127.0.0.1:<port>/v3/<fake-token> answers HTTP 429, HTTP 500, a
 // timeout and a dropped connection. For every mode of the Sepolia scripts, the result objects, the written rows and
 // the console must contain neither the fake token nor the path, and no request may be retried.
 const fs = require('fs');

@@ -1,4 +1,4 @@
-"""Cross-check scripts/lib/stats.js against numpy (SOP gate).
+"""Cross-check scripts/lib/stats.js against numpy.
 
 median: np.median; Q1 and Q3: np.percentile default ("linear", Hyndman and Fan type 7);
 p95: np.percentile(method="inverted_cdf"), the nearest-rank definition.

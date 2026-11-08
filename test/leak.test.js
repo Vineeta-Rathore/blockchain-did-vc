@@ -13,6 +13,8 @@ const { CredentialVerifierService } = require('../src/vc/verifier-service');
 const TOKEN = 'FAKE0TOKEN0abcdef0123456789';
 const ABI = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'artifacts', 'contracts', 'DIDRegistry.sol', 'DIDRegistry.json'), 'utf8')).abi;
 const CREDENTIAL = {
+  '@context': ['https://www.w3.org/ns/credentials/v2', 'https://w3id.org/security/data-integrity/v2'],
+  type: ['VerifiableCredential'],
   id: 'urn:uuid:00000000-0000-4000-8000-000000000000',
   issuer: 'did:smid:issuer-leak-test',
   credentialSubject: { id: 'did:smid:subject-leak-test' },

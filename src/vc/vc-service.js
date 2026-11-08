@@ -66,8 +66,17 @@ function fromBase58btc(value) {
   return bytes;
 }
 
+// A Multikey Ed25519 key (2-byte header + 32 bytes) is 46-48 base58btc characters after the multibase "z". The length
+// is checked before decoding, whose cost grows with the square of the input length.
+const MULTIKEY_ED25519 = /^z[1-9A-HJ-NP-Za-km-z]{40,60}$/;
+// A 64-byte Ed25519 signature is 86-88 base58btc characters; the range below leaves margin and caps decoding cost.
+const PROOF_VALUE = /^z[1-9A-HJ-NP-Za-km-z]{80,90}$/;
+
 function rawEd25519PublicKeyFromMultibase(publicKeyMultibase) {
-  const decoded = fromBase58btc(publicKeyMultibase.replace(/^z/, ''));
+  if (typeof publicKeyMultibase !== 'string' || !MULTIKEY_ED25519.test(publicKeyMultibase)) {
+    throw new Error('Invalid Ed25519 multikey');
+  }
+  const decoded = fromBase58btc(publicKeyMultibase.slice(1));
   const prefix = decoded.slice(0, 2);
 
   if (prefix.length !== 2 || prefix[0] !== 0xed || prefix[1] !== 0x01) {
@@ -83,7 +92,10 @@ function rawEd25519PublicKeyFromMultibase(publicKeyMultibase) {
 }
 
 function rawEd25519SecretKeyFromMultibase(secretKeyMultibase) {
-  const decoded = fromBase58btc(secretKeyMultibase.replace(/^z/, ''));
+  if (typeof secretKeyMultibase !== 'string' || !MULTIKEY_ED25519.test(secretKeyMultibase)) {
+    throw new Error('Invalid Ed25519 multikey');
+  }
+  const decoded = fromBase58btc(secretKeyMultibase.slice(1));
   const prefix = decoded.slice(0, 2);
 
   if (prefix.length !== 2 || prefix[0] !== 0x80 || prefix[1] !== 0x26) {
@@ -269,25 +281,32 @@ class VerifiableCredentialService {
     const { proof, ...unsecuredDocument } = securedDocument;
     const { proofValue, ...proofOptions } = proof;
     if (proofOptions.type !== 'DataIntegrityProof' || proofOptions.cryptosuite !== 'eddsa-jcs-2022' ||
-        !proofValue.startsWith('z')) {
+        !PROOF_VALUE.test(proofValue)) {
       return false;
     }
     if (proofOptions['@context'] !== undefined) {
+      // Section 3.3.2 only requires the document's @context to start with the proof's, and then hashes the proof's,
+      // so entries appended after signing would not be covered by the signature. This artifact never issues extra
+      // contexts, so the two must be equal.
       const documentContext = toArray(securedDocument['@context']);
       const proofContext = toArray(proofOptions['@context']);
-      const isPrefix = proofContext.length <= documentContext.length &&
+      const isEqual = proofContext.length === documentContext.length &&
         proofContext.every((value, i) => canonicalize(value) === canonicalize(documentContext[i]));
-      if (!isPrefix) {
+      if (!isEqual) {
         return false;
       }
       unsecuredDocument['@context'] = proofOptions['@context'];
     }
     try {
+      const signature = fromBase58btc(proofValue.slice(1));
+      if (signature.length !== 64) {
+        return false;
+      }
       return crypto.verify(
         null,
         eddsaJcsHashData(unsecuredDocument, proofOptions),
         this.importPublicKey(publicKeyMultibase),
-        fromBase58btc(proofValue.slice(1))
+        signature
       );
     } catch {
       return false;

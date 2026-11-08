@@ -315,6 +315,117 @@ describe('DID and VC credential flow', function () {
     });
   });
 
+  describe('strict input checks', function () {
+    // Re-signs a document with the issuer key, so that only the property under test differs from a valid credential.
+    function resign(document, extraProofOptions = {}) {
+      const { proof: _old, ...unsecured } = document;
+      return {
+        ...unsecured,
+        proof: VerifiableCredentialService.createProof(unsecured, {
+          type: 'DataIntegrityProof',
+          cryptosuite: 'eddsa-jcs-2022',
+          created: new Date().toISOString(),
+          verificationMethod: issuerVerificationMethod.id,
+          proofPurpose: 'assertionMethod',
+          ...extraProofOptions,
+        }, issuerKeys.privateKeyMultibase),
+      };
+    }
+    const reasonOf = async (credential, verifier = verifierService) => (await verifier.verifyCredential(credential)).reason;
+    const without = (object, key) => Object.fromEntries(Object.entries(object).filter(([k]) => k !== key));
+
+    it('requires the VC 2.0 base context first and the VerifiableCredential type', async function () {
+      const base = issueCredential();
+      const variants = {
+        vc11Context: resign({ ...base, '@context': ['https://www.w3.org/2018/credentials/v1', base['@context'][1]] }),
+        noContext: resign(without(base, '@context')),
+        noType: resign(without(base, 'type')),
+        wrongType: resign({ ...base, type: ['IdentityCredential'] }),
+      };
+      for (const [name, credential] of Object.entries(variants)) {
+        expect(await reasonOf(credential), name).to.equal('MALFORMED_CREDENTIAL');
+      }
+    });
+
+    it('rejects the VC 1.1 date properties instead of ignoring them', async function () {
+      const base = issueCredential();
+      expect(await reasonOf(resign({ ...base, expirationDate: '2020-01-01T00:00:00Z' }))).to.equal('MALFORMED_CREDENTIAL');
+      expect(await reasonOf(resign({ ...base, issuanceDate: '2099-01-01T00:00:00Z' }))).to.equal('MALFORMED_CREDENTIAL');
+    });
+
+    it('accepts only date-time stamps with a time zone', async function () {
+      for (const validUntil of ['2099-01-01T00:00:00', 'Nov 9 2099', 'Tue, 01 Jan 2099 00:00:00 GMT', '2099-01-01']) {
+        expect(await reasonOf(resign({ ...issueCredential(), validUntil })), validUntil).to.equal('MALFORMED_CREDENTIAL');
+      }
+      expect(await reasonOf(resign({ ...issueCredential(), validUntil: '2099-01-01T00:00:00+05:30' }))).to.equal('VALID');
+    });
+
+    it('rejects verifier options that would turn a check off', function () {
+      for (const clockToleranceMs of ['60000', NaN, Infinity, -1]) {
+        expect(() => new CredentialVerifierService(didRegistry, { clockToleranceMs }), String(clockToleranceMs)).to.throw(TypeError);
+      }
+      for (const blockLag of [-1, 1.5, '1']) {
+        expect(() => new CredentialVerifierService(didRegistry, { blockLag }), String(blockLag)).to.throw(TypeError);
+      }
+    });
+
+    it('returns INVALID_BLOCK_TAG for a block tag that is not a non-negative integer', async function () {
+      for (const blockTag of [-5, 'latest', 1.5]) {
+        const result = await verifierService.verifyCredential(issueCredential(), { blockTag });
+        expect(result.reason, String(blockTag)).to.equal('VERIFICATION_ERROR');
+        expect(result.errorCode, String(blockTag)).to.equal('INVALID_BLOCK_TAG');
+      }
+    });
+
+    it('rejects an oversized proof value without decoding it', async function () {
+      const credential = issueCredential();
+      credential.proof = { ...credential.proof, proofValue: `z${'2'.repeat(200000)}` };
+      const start = Date.now();
+      expect(await reasonOf(credential)).to.equal('INVALID_SIGNATURE');
+      expect(Date.now() - start).to.be.below(1000);
+    });
+
+    it('rejects @context entries appended after signing', async function () {
+      const credential = issueCredential();
+      credential['@context'] = [...credential['@context'], { role: 'https://attacker.example/vocab#admin' }];
+      expect(await reasonOf(credential)).to.equal('INVALID_SIGNATURE');
+    });
+
+    it('rejects a proof whose expires time has passed', async function () {
+      expect(await reasonOf(resign(issueCredential(), { expires: '2020-01-01T00:00:00Z' }))).to.equal('INVALID_SIGNATURE');
+      expect(await reasonOf(resign(issueCredential(), { expires: '2099-01-01T00:00:00Z' }))).to.equal('VALID');
+    });
+
+    it('accepts only Multikey verification methods of the issuer, named under its DID', async function () {
+      const withMethod = (method) => ({
+        provider: didRegistry.provider,
+        verifyDID: (did, o) => didRegistry.verifyDID(did, o),
+        isCredentialRevoked: (did, id, o) => didRegistry.isCredentialRevoked(did, id, o),
+        async getDIDDocument(did, o) {
+          const doc = await didRegistry.getDIDDocument(did, o);
+          return { id: doc.id, active: doc.active, verificationMethods: [JSON.stringify(method)] };
+        },
+      });
+      const wrongController = { ...issuerVerificationMethod, controller: holderDid };
+      const wrongType = { ...issuerVerificationMethod, type: 'Ed25519VerificationKey2020' };
+      for (const method of [wrongController, wrongType]) {
+        expect(await reasonOf(issueCredential(), new CredentialVerifierService(withMethod(method))), method.type + method.controller)
+          .to.equal('VERIFICATION_METHOD_NOT_FOUND');
+      }
+      const foreignId = { ...issuerVerificationMethod, id: `${holderDid}#key-1` };
+      const signedWithForeignId = issueCredential({ verificationMethod: foreignId });
+      expect(await reasonOf(signedWithForeignId, new CredentialVerifierService(withMethod(foreignId))))
+        .to.equal('VERIFICATION_METHOD_NOT_FOUND');
+    });
+
+    it('rejects a public key without the multibase z prefix', function () {
+      const credential = issueCredential();
+      const key = issuerKeys.publicKeyMultibase;
+      expect(VerifiableCredentialService.verifyProof(credential, key)).to.equal(true);
+      expect(VerifiableCredentialService.verifyProof(credential, key.slice(1))).to.equal(false);
+    });
+  });
+
   describe('per-step timing', function () {
     it('gives the same results with timing on and off', async function () {
       const timed = new CredentialVerifierService(didRegistry, { timing: true });
@@ -450,10 +561,13 @@ describe('DID and VC credential flow', function () {
       expect(credential.proof['@context']).to.deep.equal(credential['@context']);
     });
 
-    it('fails when the document @context no longer starts with the proof @context', async function () {
+    it('fails when the document @context differs from the proof @context', async function () {
       const credential = issueCredential();
-      credential['@context'] = [credential['@context'][1], credential['@context'][0]];
+      credential['@context'] = [credential['@context'][0], 'https://example.org/other-context/v1'];
       expect((await verifierService.verifyCredential(credential)).reason).to.equal('INVALID_SIGNATURE');
+      const reordered = issueCredential();
+      reordered['@context'] = [reordered['@context'][1], reordered['@context'][0]];
+      expect((await verifierService.verifyCredential(reordered)).reason).to.equal('MALFORMED_CREDENTIAL');
     });
 
     for (const [field, value] of [

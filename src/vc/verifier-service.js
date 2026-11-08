@@ -3,9 +3,19 @@ const { VerifiableCredentialService } = require('./vc-service');
 // Default clock tolerance for validFrom. RFC 7519 (sections 4.1.4 and 4.1.5) allows "some small leeway, usually
 // no more than a few minutes, to account for clock skew"; one minute is used here.
 const DEFAULT_CLOCK_TOLERANCE_MS = 60 * 1000;
+const VC_V2_CONTEXT = 'https://www.w3.org/ns/credentials/v2';
+
+// VC 2.0 (section 4.9) requires validFrom and validUntil to be XML Schema dateTimeStamp values: a date, a time and a
+// time zone. Anything else (no time zone, which Date.parse would read in the verifier's local zone, or other formats
+// Date.parse accepts) is rejected.
+const DATE_TIME_STAMP = /^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
 function isValidDate(value) {
-  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+  return typeof value === 'string' && DATE_TIME_STAMP.test(value) && !Number.isNaN(Date.parse(value));
+}
+
+function isNonNegativeInteger(value) {
+  return Number.isInteger(value) && value >= 0;
 }
 
 // Error codes only: never copy error.message, which can contain the RPC URL.
@@ -24,10 +34,18 @@ class CredentialVerifierService {
    * @param {object} [options.provider] provider used for the block number (default didRegistry.provider)
    */
   constructor(didRegistry, options = {}) {
+    const clockToleranceMs = options.clockToleranceMs ?? DEFAULT_CLOCK_TOLERANCE_MS;
+    if (typeof clockToleranceMs !== 'number' || !Number.isFinite(clockToleranceMs) || clockToleranceMs < 0) {
+      throw new TypeError('clockToleranceMs must be a finite number of milliseconds, 0 or more');
+    }
+    const blockLag = options.blockLag ?? 0;
+    if (!isNonNegativeInteger(blockLag)) {
+      throw new TypeError('blockLag must be an integer, 0 or more');
+    }
     this.didRegistry = didRegistry;
-    this.clockToleranceMs = options.clockToleranceMs ?? DEFAULT_CLOCK_TOLERANCE_MS;
+    this.clockToleranceMs = clockToleranceMs;
     this.timing = Boolean(options.timing);
-    this.blockLag = options.blockLag ?? 0;
+    this.blockLag = blockLag;
     this.provider = options.provider || didRegistry.provider;
   }
 
@@ -56,6 +74,15 @@ class CredentialVerifierService {
         step('V1');
         return done(false, 'MALFORMED_CREDENTIAL');
       }
+      // VC 2.0 (sections 4.3 and 4.5): the base context comes first and the type includes VerifiableCredential.
+      // The VC 1.1 date properties are rejected rather than ignored, so a VC 1.1 expiry cannot be skipped.
+      const contexts = Array.isArray(credential['@context']) ? credential['@context'] : [credential['@context']];
+      const types = Array.isArray(credential.type) ? credential.type : [credential.type];
+      if (contexts[0] !== VC_V2_CONTEXT || !types.includes('VerifiableCredential') ||
+          credential.issuanceDate !== undefined || credential.expirationDate !== undefined) {
+        step('V1');
+        return done(false, 'MALFORMED_CREDENTIAL');
+      }
       if (!credential.proof?.verificationMethod) {
         step('V1');
         return done(false, 'MISSING_PROOF');
@@ -73,8 +100,12 @@ class CredentialVerifierService {
       const subjectDid = credential.credentialSubject.id;
       const credentialId = credential.id;
 
-      // B0: the block that every read is pinned to
-      if (Number.isInteger(options.blockTag)) {
+      // B0: the block that every read is pinned to. A caller's block must be a block number (an integer, 0 or more);
+      // a past block gives the answer as of that block, and the result reports it.
+      if (options.blockTag !== undefined) {
+        if (!isNonNegativeInteger(options.blockTag)) {
+          throw Object.assign(new Error('blockTag'), { code: 'INVALID_BLOCK_TAG' });
+        }
         checkedAtBlock = options.blockTag;
       } else {
         checkedAtBlock = Math.max(0, (await this.provider.getBlockNumber()) - this.blockLag);
@@ -114,21 +145,25 @@ class CredentialVerifierService {
         step('V5');
         return done(false, 'ISSUER_DID_INACTIVE_OR_UNKNOWN');
       }
+      // The method must be a Multikey of the issuer: controlled by the issuer DID and named under it. The registry has
+      // no assertionMethod relationship, so any such method of the issuer can sign credentials.
       const verificationMethod = this.findVerificationMethod(
         issuerDocument.verificationMethods,
         credential.proof.verificationMethod
       );
-      if (!verificationMethod) {
+      if (!verificationMethod || verificationMethod.type !== 'Multikey' || verificationMethod.controller !== issuerDid ||
+          typeof verificationMethod.id !== 'string' || !verificationMethod.id.startsWith(`${issuerDid}#`)) {
         step('V5');
         return done(false, 'VERIFICATION_METHOD_NOT_FOUND');
       }
       step('V5');
 
-      // V6: eddsa-jcs-2022 proof (type, cryptosuite, purpose, context prefix, signature)
+      // V6: eddsa-jcs-2022 proof (type, cryptosuite, purpose, expiry, @context, signature)
       const proof = credential.proof;
       if (proof.type !== 'DataIntegrityProof' ||
           proof.cryptosuite !== 'eddsa-jcs-2022' ||
           proof.proofPurpose !== 'assertionMethod' ||
+          (proof.expires !== undefined && (!isValidDate(proof.expires) || Date.parse(proof.expires) <= now)) ||
           !VerifiableCredentialService.verifyProof(credential, verificationMethod.publicKeyMultibase)) {
         step('V6');
         return done(false, 'INVALID_SIGNATURE');

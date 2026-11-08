@@ -53,7 +53,7 @@ async function main() {
   const url = R.readRpcUrl(arg('--env'));
   const keyFile = arg('--key');
   const outPath = arg('--out', 'results/sepolia_v1.1_deployment.json');
-  const secretsDir = arg('--secrets-dir', path.join(os.homedir(), '.r2_secrets'));
+  const secretsDir = arg('--secrets-dir', path.join(os.homedir(), '.blockchain-did-vc-secrets'));
   if (!url) throw Object.assign(new Error('missing'), { code: 'SEPOLIA_RPC_URL_MISSING' });
   if (!keyFile) throw Object.assign(new Error('missing'), { code: 'KEY_FILE_MISSING' });
 

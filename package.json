@@ -1,20 +1,22 @@
 {
   "name": "blockchain-did-vc",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Reference implementation: DID-anchored Verifiable Credentials with on-chain revocation (W3C DID Core 1.0, VC Data Model v2.0, eddsa-jcs-2022 Data Integrity, Ed25519 Multikey) on Ethereum.",
   "license": "MIT",
   "scripts": {
     "compile": "npx hardhat compile",
     "test": "npx hardhat test",
     "measure-gas": "npx hardhat run scripts/measure-gas.js",
+    "measure-local": "npx hardhat run scripts/measure-local.js",
+    "analyze": "node scripts/analyze-latency.js",
+    "deploy-sepolia": "node scripts/deploy-sepolia.js",
+    "measure-sepolia": "node scripts/measure-sepolia.js",
     "node": "npx hardhat node",
-    "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
-    "deploy:sepolia": "npx hardhat run scripts/deploy.js --network sepolia"
+    "deploy:local": "npx hardhat run scripts/deploy.js --network localhost"
   },
   "dependencies": {
     "@nomiclabs/hardhat-ethers": "^2.2.3",
     "@nomiclabs/hardhat-waffle": "^2.0.6",
-    "dotenv": "^16.3.1",
     "ethers": "^5.7.2"
   },
   "devDependencies": {

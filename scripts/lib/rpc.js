@@ -72,8 +72,18 @@ function connectionInfo(url, timeoutMs = 30000) {
   return { url, throttleLimit: 1, timeout: timeoutMs };
 }
 
+// ethers v5's JsonRpcProvider.send reuses an eth_blockNumber or eth_chainId request made in the same event-loop turn
+// (a cache cleared by setTimeout). The block number (step B0) must be a fresh request every time, so the cache entry
+// is dropped before each send.
+class UncachedStaticJsonRpcProvider extends ethers.providers.StaticJsonRpcProvider {
+  send(method, params) {
+    if (this._cache) delete this._cache[method];
+    return super.send(method, params);
+  }
+}
+
 function makeProvider(url, { network = SEPOLIA, timeoutMs } = {}) {
-  return new ethers.providers.StaticJsonRpcProvider(connectionInfo(url, timeoutMs), network);
+  return new UncachedStaticJsonRpcProvider(connectionInfo(url, timeoutMs), network);
 }
 
 // Counts requests by JSON-RPC method only. ethers v5 delivers its "debug" events through setTimeout, so a request

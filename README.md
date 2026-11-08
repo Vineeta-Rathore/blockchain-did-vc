@@ -53,11 +53,11 @@ does not reproduce its bytecode; its interface is the version 1.0.0 ABI ([`resul
 ```bash
 npm ci                 # install the locked toolchain (Hardhat 2.29.0, ethers 5.8.0)
 npx hardhat compile    # solc 0.8.19, optimiser on, 200 runs
-npm test               # 85 tests
+npm test               # 86 tests
 npm run measure-gas    # gas of each operation, on the osaka schedule and on Sepolia's
 ```
 
-`npm test` runs four suites: the registry (43 tests), credentials and verification (34), leak tests of the Sepolia
+`npm test` runs four suites: the registry (43 tests), credentials and verification (35), leak tests of the Sepolia
 scripts' error handling against a local fake server (6), and the gas model (2).
 
 ## Repository layout
@@ -142,7 +142,7 @@ the credential's `@context` is copied into the proof before the proof configurat
 
 | Step | Check | Result if it fails |
 |---|---|---|
-| V1 | `issuer`, `credentialSubject.id` and `proof.verificationMethod` are present; `validFrom` and `validUntil`, if present, are valid dates and `validUntil` is not earlier than `validFrom` | `MALFORMED_CREDENTIAL`, `MISSING_PROOF` |
+| V1 | `id` (a non-empty string, because revocation is keyed by it), `issuer`, `credentialSubject.id` and `proof.verificationMethod` are present; `validFrom` and `validUntil`, if present, are valid dates and `validUntil` is not earlier than `validFrom` | `MALFORMED_CREDENTIAL`, `MISSING_PROOF` |
 | B0 | read the newest block number N (or use the caller's block) | `VERIFICATION_ERROR` |
 | V2 | the issuer DID exists and is active at block N | `ISSUER_DID_INACTIVE_OR_UNKNOWN` |
 | V3 | the subject DID exists and is active at block N | `SUBJECT_DID_INACTIVE_OR_UNKNOWN` |

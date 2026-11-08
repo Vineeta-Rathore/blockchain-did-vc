@@ -220,6 +220,26 @@ describe('DID and VC credential flow', function () {
     expect(result.reason).to.equal('MALFORMED_CREDENTIAL');
   });
 
+  it('fails with MALFORMED_CREDENTIAL when a validly signed credential has no usable id (revocation is keyed by it)', async function () {
+    const { proof, id: _issuedId, ...withoutId } = issueCredential();
+    const resign = (document) => ({
+      ...document,
+      proof: VerifiableCredentialService.createProof(document, {
+        type: 'DataIntegrityProof',
+        cryptosuite: 'eddsa-jcs-2022',
+        created: proof.created,
+        verificationMethod: proof.verificationMethod,
+        proofPurpose: 'assertionMethod',
+      }, issuerKeys.privateKeyMultibase),
+    });
+
+    for (const credential of [resign(withoutId), resign({ ...withoutId, id: '' })]) {
+      const result = await verifierService.verifyCredential(credential);
+      expect(result.valid, JSON.stringify(credential.id)).to.equal(false);
+      expect(result.reason, JSON.stringify(credential.id)).to.equal('MALFORMED_CREDENTIAL');
+    }
+  });
+
   it('fails when the issuer verification method has been rotated off the DID document', async function () {
     const credential = issueCredential();
 

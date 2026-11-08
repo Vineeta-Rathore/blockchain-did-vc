@@ -49,8 +49,10 @@ class CredentialVerifierService {
     const done = (valid, reason) => this.result(valid, reason, credential, checkedAt, checkedAtBlock, timings);
 
     try {
-      // V1: structure and validity dates
-      if (!credential || !credential.issuer || !credential.credentialSubject?.id) {
+      // V1: structure and validity dates. Revocation is keyed by the credential id, so a credential without a
+      // non-empty string id cannot be checked at V7 and is rejected here.
+      if (!credential || typeof credential.id !== 'string' || credential.id === '' ||
+          !credential.issuer || !credential.credentialSubject?.id) {
         step('V1');
         return done(false, 'MALFORMED_CREDENTIAL');
       }

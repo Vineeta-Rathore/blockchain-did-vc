@@ -41,6 +41,9 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
 - The proof configuration was hashed without `@context`, so proof values differed from other `eddsa-jcs-2022`
   implementations.
 - After `rotateKey`, the rotated-out key stayed in the authentication methods.
+- A correctly signed credential with an empty `id` verified as `VALID`, and one without an `id` failed at the
+  revocation check with `VERIFICATION_ERROR`. Revocation is keyed by the credential `id`, so both now fail at V1 with
+  `MALFORMED_CREDENTIAL`.
 
 ### Measurements, scripts and data
 
@@ -58,7 +61,7 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   `measure-local.js`.
 - `results/did2_sepolia.jsonl` is now `results/sepolia_2026-07-21_n20.jsonl` (content unchanged);
   `results/README.md` replaces `results/sepolia_results.md` and describes every log.
-- Tests: 85 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3) and leak tests of
+- Tests: 86 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3) and leak tests of
   the Sepolia scripts.
 
 ## 1.0.0 (24 July 2026)

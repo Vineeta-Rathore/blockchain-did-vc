@@ -236,7 +236,7 @@ describe("DIDRegistry", function () {
       await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
 
       await expect(
-        didRegistry.connect(user1).revokeCredential(didId, credentialId, "Key compromised")
+        didRegistry.connect(user1).revokeCredential(didId, credentialId, 1)
       ).to.emit(didRegistry, "CredentialRevoked");
 
       expect(await didRegistry.isCredentialRevoked(didId, credentialId)).to.be.true;
@@ -250,10 +250,10 @@ describe("DIDRegistry", function () {
       const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("issuer2"));
 
       await didRegistry.connect(user1).createDID(didId, verificationMethods, services, dataHash);
-      await didRegistry.connect(user1).revokeCredential(didId, credentialId, "Expired");
+      await didRegistry.connect(user1).revokeCredential(didId, credentialId, 0);
 
       await expect(
-        didRegistry.connect(user1).revokeCredential(didId, credentialId, "Double revoke")
+        didRegistry.connect(user1).revokeCredential(didId, credentialId, 0)
       ).to.be.revertedWith("DIDRegistry: Already revoked");
     });
 
@@ -268,9 +268,9 @@ describe("DIDRegistry", function () {
       await didRegistry.connect(user1).deactivateDID(didId);
       expect(await didRegistry.verifyDID(didId)).to.be.false;
 
-      // revokeCredential has no didActive modifier — controller retains revocation rights
+      // revokeCredential has no didActive modifier: the controller keeps revocation rights
       await expect(
-        didRegistry.connect(user1).revokeCredential(didId, credentialId, "Post-deactivation revocation")
+        didRegistry.connect(user1).revokeCredential(didId, credentialId, 5)
       ).to.emit(didRegistry, "CredentialRevoked");
       expect(await didRegistry.isCredentialRevoked(didId, credentialId)).to.be.true;
     });
@@ -278,7 +278,7 @@ describe("DIDRegistry", function () {
     it("Should revert when revoking credential on non-existent DID", async function () {
       await expect(
         didRegistry.connect(user1).revokeCredential(
-          "did:example:does-not-exist", "cred:123", "reason"
+          "did:example:does-not-exist", "cred:123", 0
         )
       ).to.be.revertedWith("DIDRegistry: DID does not exist");
     });
@@ -318,6 +318,174 @@ describe("DIDRegistry", function () {
           ethers.utils.keccak256(ethers.utils.toUtf8Bytes("paused"))
         )
       ).to.be.revertedWith("DIDRegistry: Contract paused");
+    });
+  });
+
+  describe("Pause scope", function () {
+    const didId = "did:example:pause-scope";
+    const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("pause-scope"));
+
+    beforeEach(async function () {
+      await didRegistry.connect(user1).createDID(didId, ["key1", "key2"], ["service1"], dataHash);
+      await didRegistry.connect(owner).pause();
+    });
+
+    it("lets the controller revoke a credential while paused", async function () {
+      await expect(
+        didRegistry.connect(user1).revokeCredential(didId, "cred:while-paused", 1)
+      ).to.emit(didRegistry, "CredentialRevoked");
+      expect(await didRegistry.isCredentialRevoked(didId, "cred:while-paused")).to.be.true;
+    });
+
+    it("lets the controller deactivate a DID while paused", async function () {
+      await expect(didRegistry.connect(user1).deactivateDID(didId)).to.emit(didRegistry, "DIDDeactivated");
+      expect(await didRegistry.verifyDID(didId)).to.be.false;
+    });
+
+    it("blocks every other write while paused", async function () {
+      const paused = "DIDRegistry: Contract paused";
+      const sigAuth = ethers.utils.formatBytes32String("sigAuth");
+      await expect(
+        didRegistry.connect(user2).createDID("did:example:new", ["key1"], [], dataHash)
+      ).to.be.revertedWith(paused);
+      await expect(
+        didRegistry.connect(user1).updateDID(didId, ["key3"], [], dataHash)
+      ).to.be.revertedWith(paused);
+      await expect(didRegistry.connect(user1).rotateKey(didId, 0, "key9")).to.be.revertedWith(paused);
+      await expect(
+        didRegistry.connect(user1).changeController(didId, user2.address)
+      ).to.be.revertedWith(paused);
+      await expect(
+        didRegistry.connect(user1).addDelegate(didId, user2.address, sigAuth, 3600)
+      ).to.be.revertedWith(paused);
+      await expect(
+        didRegistry.connect(user1).removeDelegate(didId, user2.address, sigAuth)
+      ).to.be.revertedWith(paused);
+      await expect(
+        didRegistry.connect(user1).setAttribute(didId, sigAuth, "0x01")
+      ).to.be.revertedWith(paused);
+      await didRegistry.connect(user1).deactivateDID(didId);
+      await expect(didRegistry.connect(user1).reactivateDID(didId)).to.be.revertedWith(paused);
+    });
+
+    it("does not let the owner or another account revoke or deactivate someone else's DID", async function () {
+      await expect(
+        didRegistry.connect(owner).revokeCredential(didId, "cred:owner-attempt", 0)
+      ).to.be.revertedWith("DIDRegistry: Not authorized");
+      await expect(didRegistry.connect(user2).deactivateDID(didId)).to.be.revertedWith("DIDRegistry: Not authorized");
+      await didRegistry.connect(owner).unpause();
+      await expect(
+        didRegistry.connect(owner).revokeCredential(didId, "cred:owner-attempt", 0)
+      ).to.be.revertedWith("DIDRegistry: Not authorized");
+    });
+
+    it("keeps the read functions answering while paused", async function () {
+      await didRegistry.connect(user1).revokeCredential(didId, "cred:read", 4);
+      expect(await didRegistry.verifyDID(didId)).to.be.true;
+      expect((await didRegistry.getDIDDocument(didId)).id).to.equal(didId);
+      expect(await didRegistry.isCredentialRevoked(didId, "cred:read")).to.be.true;
+      expect((await didRegistry.getRevocationEntry(didId, "cred:read")).reasonCode).to.equal(4);
+    });
+  });
+
+  describe("Revocation reason codes", function () {
+    const didId = "did:example:reason-codes";
+
+    beforeEach(async function () {
+      await didRegistry.connect(user1).createDID(
+        didId, ["key1"], [], ethers.utils.keccak256(ethers.utils.toUtf8Bytes("reasons"))
+      );
+    });
+
+    it("stores, returns and emits each accepted RFC 5280 code", async function () {
+      for (const code of [0, 1, 2, 3, 4, 5, 9, 10]) {
+        const credentialId = `cred:code-${code}`;
+        const tx = await didRegistry.connect(user1).revokeCredential(didId, credentialId, code);
+        const receipt = await tx.wait();
+        const event = receipt.events.find((e) => e.event === "CredentialRevoked");
+        // ethers v5 decodes this event with positional keys only (didId, credentialId, reasonCode, timestamp)
+        expect(event.args[2]).to.equal(code);
+
+        const entry = await didRegistry.getRevocationEntry(didId, credentialId);
+        expect(entry.isRevoked).to.be.true;
+        expect(entry.reasonCode).to.equal(code);
+        expect(entry.credentialId).to.equal(credentialId);
+        expect(entry.revokedAt.toNumber()).to.equal((await ethers.provider.getBlock(receipt.blockNumber)).timestamp);
+      }
+    });
+
+    it("rejects codes 6, 7, 8, 11 and 255", async function () {
+      for (const code of [6, 7, 8, 11, 255]) {
+        await expect(
+          didRegistry.connect(user1).revokeCredential(didId, `cred:bad-${code}`, code)
+        ).to.be.revertedWith("DIDRegistry: Invalid reason code");
+      }
+    });
+  });
+
+  describe("Admin events", function () {
+    it("emits an event for each admin action, naming the caller", async function () {
+      await expect(didRegistry.connect(owner).addAdmin(user1.address))
+        .to.emit(didRegistry, "AdminAdded").withArgs(user1.address, owner.address);
+      await expect(didRegistry.connect(user1).pause())
+        .to.emit(didRegistry, "Paused").withArgs(user1.address);
+      await expect(didRegistry.connect(owner).unpause())
+        .to.emit(didRegistry, "Unpaused").withArgs(owner.address);
+      await expect(didRegistry.connect(owner).removeAdmin(user1.address))
+        .to.emit(didRegistry, "AdminRemoved").withArgs(user1.address, owner.address);
+    });
+  });
+
+  describe("Repair while deactivated", function () {
+    const didId = "did:example:repair";
+    const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("repair"));
+
+    beforeEach(async function () {
+      await didRegistry.connect(user1).createDID(didId, ["oldKey1", "oldKey2"], ["service1"], dataHash);
+    });
+
+    it("rotates a key on a deactivated DID, which stays deactivated", async function () {
+      await didRegistry.connect(user1).deactivateDID(didId);
+      await expect(didRegistry.connect(user1).rotateKey(didId, 0, "newKey1")).to.emit(didRegistry, "KeyRotated");
+      const doc = await didRegistry.getDIDDocument(didId);
+      expect(doc.active).to.be.false;
+      expect(doc.verificationMethods[0]).to.equal("newKey1");
+      expect(await didRegistry.verifyDID(didId)).to.be.false;
+    });
+
+    it("updates a deactivated DID, which stays deactivated, and syncs its authentication keys", async function () {
+      await didRegistry.connect(user1).deactivateDID(didId);
+      await expect(
+        didRegistry.connect(user1).updateDID(didId, ["freshKey"], ["service1"], dataHash)
+      ).to.emit(didRegistry, "DIDUpdated");
+      const doc = await didRegistry.getDIDDocument(didId);
+      expect(doc.active).to.be.false;
+      expect(doc.verificationMethods).to.deep.equal(["freshKey"]);
+      expect(doc.authenticationMethods).to.deep.equal(["freshKey"]);
+    });
+
+    it("removes a rotated key from both key lists", async function () {
+      await didRegistry.connect(user1).rotateKey(didId, 0, "newKey1");
+      const doc = await didRegistry.getDIDDocument(didId);
+      expect(doc.verificationMethods).to.not.include("oldKey1");
+      expect(doc.authenticationMethods).to.not.include("oldKey1");
+      expect(doc.authenticationMethods).to.include("newKey1");
+      expect(doc.authenticationMethods).to.include("oldKey2");
+    });
+
+    it("still refuses a controller change on a deactivated DID", async function () {
+      await didRegistry.connect(user1).deactivateDID(didId);
+      await expect(
+        didRegistry.connect(user1).changeController(didId, user2.address)
+      ).to.be.revertedWith("DIDRegistry: DID is deactivated");
+    });
+
+    it("keeps revocations made while deactivated after reactivation", async function () {
+      await didRegistry.connect(user1).deactivateDID(didId);
+      await didRegistry.connect(user1).revokeCredential(didId, "cred:revoked-while-deactivated", 1);
+      await didRegistry.connect(user1).reactivateDID(didId);
+      expect(await didRegistry.verifyDID(didId)).to.be.true;
+      expect(await didRegistry.isCredentialRevoked(didId, "cred:revoked-while-deactivated")).to.be.true;
     });
   });
 

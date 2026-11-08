@@ -7,7 +7,7 @@ const {
 } = require('../src/vc/vc-service');
 const { CredentialVerifierService } = require('../src/vc/verifier-service');
 
-describe('Journal 2 DID + VC credential flow', function () {
+describe('DID and VC credential flow', function () {
   let didRegistry;
   let issuer;
   let holder;
@@ -27,8 +27,8 @@ describe('Journal 2 DID + VC credential flow', function () {
     await didRegistry.deployed();
 
     verifierService = new CredentialVerifierService(didRegistry);
-    issuerDid = 'did:journal2:issuer';
-    holderDid = 'did:journal2:holder';
+    issuerDid = 'did:smid:issuer';
+    holderDid = 'did:smid:holder';
     issuerKeys = VerifiableCredentialService.generateEd25519KeyPair();
     holderKeys = VerifiableCredentialService.generateEd25519KeyPair();
 
@@ -111,7 +111,7 @@ describe('Journal 2 DID + VC credential flow', function () {
 
   it('fails when the issuer DID is tampered', async function () {
     const credential = issueCredential();
-    credential.issuer = 'did:journal2:unknown-issuer';
+    credential.issuer = 'did:smid:unknown-issuer';
 
     const result = await verifierService.verifyCredential(credential);
 
@@ -149,7 +149,7 @@ describe('Journal 2 DID + VC credential flow', function () {
     const tx = await didRegistry.connect(issuer).revokeCredential(
       issuerDid,
       credential.id,
-      'Credential withdrawn by issuer'
+      9 // RFC 5280 privilegeWithdrawn
     );
     const receipt = await tx.wait();
     console.log(`Gas used for credential revocation: ${receipt.gasUsed.toString()}`);
@@ -181,13 +181,13 @@ describe('Journal 2 DID + VC credential flow', function () {
   });
 
   it('documents duplicate credential ID behavior through the revocation registry', async function () {
-    const credentialId = 'urn:uuid:duplicate-journal2-id';
+    const credentialId = 'urn:uuid:duplicate-credential-id';
     const firstCredential = issueCredential({ credentialId });
     const secondCredential = issueCredential({ credentialId });
 
     expect(firstCredential.id).to.equal(secondCredential.id);
 
-    await didRegistry.connect(issuer).revokeCredential(issuerDid, credentialId, 'Duplicate ID retired');
+    await didRegistry.connect(issuer).revokeCredential(issuerDid, credentialId, 4);
 
     const firstResult = await verifierService.verifyCredential(firstCredential);
     const secondResult = await verifierService.verifyCredential(secondCredential);
@@ -198,10 +198,10 @@ describe('Journal 2 DID + VC credential flow', function () {
 
   it('rejects duplicate revocation attempts', async function () {
     const credential = issueCredential();
-    await didRegistry.connect(issuer).revokeCredential(issuerDid, credential.id, 'Initial revocation');
+    await didRegistry.connect(issuer).revokeCredential(issuerDid, credential.id, 0);
 
     await expect(
-      didRegistry.connect(issuer).revokeCredential(issuerDid, credential.id, 'Second revocation')
+      didRegistry.connect(issuer).revokeCredential(issuerDid, credential.id, 0)
     ).to.be.revertedWith('DIDRegistry: Already revoked');
   });
 
@@ -209,7 +209,7 @@ describe('Journal 2 DID + VC credential flow', function () {
     const credential = issueCredential();
 
     await expect(
-      didRegistry.connect(attacker).revokeCredential(issuerDid, credential.id, 'Unauthorized')
+      didRegistry.connect(attacker).revokeCredential(issuerDid, credential.id, 0)
     ).to.be.revertedWith('DIDRegistry: Not authorized');
   });
 
@@ -224,7 +224,7 @@ describe('Journal 2 DID + VC credential flow', function () {
     const credential = issueCredential();
 
     // Replace issuer DID's verification methods with a new key under a different key ID.
-    // The credential's proof.verificationMethod still references did:journal2:issuer#key-1,
+    // The credential's proof.verificationMethod still references did:smid:issuer#key-1,
     // which is now absent from the DID document, triggering Step V5.
     const newKeys = VerifiableCredentialService.generateEd25519KeyPair();
     const newVerificationMethod = VerifiableCredentialService.createVerificationMethod(
@@ -249,7 +249,7 @@ describe('Journal 2 DID + VC credential flow', function () {
   it('fails when the proof configuration is tampered after signing', async function () {
     const credential = issueCredential();
 
-    // Mutate proof.created — changes the proofConfig hash in the dual-hash pipeline
+    // Mutate proof.created: this changes the proofConfig hash in the dual-hash pipeline
     // (SHA-256(proofConfig) || SHA-256(document)) without altering the document,
     // so Step V5 passes but Step V6 Ed25519 verification fails.
     credential.proof.created = '2000-01-01T00:00:00.000Z';
@@ -260,25 +260,208 @@ describe('Journal 2 DID + VC credential flow', function () {
     expect(result.reason).to.equal('INVALID_SIGNATURE');
   });
 
-  it('measures end-to-end credential verification latency for evaluation reporting', async function () {
+  it('verifies the same credential 100 times in a row (functional check; timing lives in scripts/measure-local.js)', async function () {
     const credential = issueCredential();
-    const samples = [];
 
     for (let i = 0; i < 100; i++) {
-      const start = process.hrtime.bigint();
       const result = await verifierService.verifyCredential(credential);
-      const end = process.hrtime.bigint();
-
       expect(result.valid).to.equal(true);
-      samples.push(Number(end - start) / 1_000_000);
+    }
+  });
+
+  describe('validity period (R1.3)', function () {
+    it('fails with CREDENTIAL_NOT_YET_VALID when validFrom is beyond the clock tolerance', async function () {
+      const credential = issueCredential({ validFrom: new Date(Date.now() + 10 * 60 * 1000).toISOString() });
+      expect((await verifierService.verifyCredential(credential)).reason).to.equal('CREDENTIAL_NOT_YET_VALID');
+    });
+
+    it('accepts a validFrom inside the clock tolerance', async function () {
+      const credential = issueCredential({ validFrom: new Date(Date.now() + 30 * 1000).toISOString() });
+      expect((await verifierService.verifyCredential(credential)).reason).to.equal('VALID');
+    });
+
+    it('fails with MALFORMED_CREDENTIAL on an unparsable timestamp', async function () {
+      const badUntil = issueCredential();
+      badUntil.validUntil = 'not-a-date';
+      expect((await verifierService.verifyCredential(badUntil)).reason).to.equal('MALFORMED_CREDENTIAL');
+      const badFrom = issueCredential();
+      badFrom.validFrom = 'yesterday';
+      expect((await verifierService.verifyCredential(badFrom)).reason).to.equal('MALFORMED_CREDENTIAL');
+    });
+
+    it('fails with MALFORMED_CREDENTIAL when validUntil is earlier than validFrom', async function () {
+      const credential = issueCredential({ validFrom: '2026-01-02T00:00:00Z', validUntil: '2026-01-01T00:00:00Z' });
+      expect((await verifierService.verifyCredential(credential)).reason).to.equal('MALFORMED_CREDENTIAL');
+    });
+  });
+
+  describe('per-step timing', function () {
+    it('gives the same results with timing on and off', async function () {
+      const timed = new CredentialVerifierService(didRegistry, { timing: true });
+      const tampered = issueCredential();
+      tampered.credentialSubject.accessLevel = 'admin';
+      const credentials = [
+        issueCredential(),
+        issueCredential({ validFrom: '2024-01-01T00:00:00Z', validUntil: '2024-01-02T00:00:00Z' }),
+        tampered,
+        {},
+      ];
+      for (const credential of credentials) {
+        const plain = await verifierService.verifyCredential(credential);
+        const withTiming = await timed.verifyCredential(credential);
+        expect(withTiming.valid).to.equal(plain.valid);
+        expect(withTiming.reason).to.equal(plain.reason);
+        expect(plain.timings).to.equal(undefined);
+        expect(withTiming.timings).to.be.an('object');
+      }
+      const full = await timed.verifyCredential(issueCredential());
+      expect(Object.keys(full.timings)).to.deep.equal(['V1', 'B0', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8']);
+    });
+  });
+
+  describe('same-block reads', function () {
+    function recordingRegistry(base, { blockNumber = 100, documentActive = true } = {}) {
+      const calls = [];
+      return {
+        calls,
+        provider: { getBlockNumber: async () => blockNumber },
+        async verifyDID(did, overrides) {
+          calls.push(['verifyDID', overrides]);
+          return base.verifyDID(did);
+        },
+        async getDIDDocument(did, overrides) {
+          calls.push(['getDIDDocument', overrides]);
+          const doc = await base.getDIDDocument(did);
+          return { id: doc.id, active: documentActive && doc.active, verificationMethods: doc.verificationMethods };
+        },
+        async isCredentialRevoked(did, id, overrides) {
+          calls.push(['isCredentialRevoked', overrides]);
+          return base.isCredentialRevoked(did, id);
+        },
+      };
     }
 
-    samples.sort((a, b) => a - b);
-    const p50 = samples[Math.floor(samples.length * 0.5)];
-    const p95 = samples[Math.floor(samples.length * 0.95)];
-    const mean = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+    it('pins all four reads to one block and reports it', async function () {
+      const stub = recordingRegistry(didRegistry, { blockNumber: 4242 });
+      const result = await new CredentialVerifierService(stub).verifyCredential(issueCredential());
+      expect(result.reason).to.equal('VALID');
+      expect(result.checkedAtBlock).to.equal(4242);
+      expect(stub.calls.map((c) => c[0])).to.deep.equal(['verifyDID', 'verifyDID', 'getDIDDocument', 'isCredentialRevoked']);
+      for (const [, overrides] of stub.calls) {
+        expect(overrides).to.deep.equal({ blockTag: 4242 });
+      }
+    });
 
-    console.log(`VC verification latency over 100 runs: mean=${mean.toFixed(3)}ms p50=${p50.toFixed(3)}ms p95=${p95.toFixed(3)}ms`);
-    expect(p95).to.be.lessThan(250);
+    it('pins to the block below the newest with blockLag 1', async function () {
+      const stub = recordingRegistry(didRegistry, { blockNumber: 4242 });
+      const result = await new CredentialVerifierService(stub, { blockLag: 1 }).verifyCredential(issueCredential());
+      expect(result.checkedAtBlock).to.equal(4241);
+      for (const [, overrides] of stub.calls) {
+        expect(overrides).to.deep.equal({ blockTag: 4241 });
+      }
+    });
+
+    it('answers as of the pinned block on the chain', async function () {
+      const credential = issueCredential();
+      const before = await ethers.provider.getBlockNumber();
+      await didRegistry.connect(issuer).deactivateDID(issuerDid);
+      const after = await ethers.provider.getBlockNumber();
+      expect(after).to.be.greaterThan(before);
+
+      const atBefore = await verifierService.verifyCredential(credential, { blockTag: before });
+      expect(atBefore.reason).to.equal('VALID');
+      expect(atBefore.checkedAtBlock).to.equal(before);
+
+      const atAfter = await verifierService.verifyCredential(credential, { blockTag: after });
+      expect(atAfter.reason).to.equal('ISSUER_DID_INACTIVE_OR_UNKNOWN');
+      expect((await verifierService.verifyCredential(credential)).checkedAtBlock).to.equal(after);
+    });
+
+    it('rejects at V5 when the issuer document is inactive although verifyDID said active', async function () {
+      const stub = recordingRegistry(didRegistry, { documentActive: false });
+      const result = await new CredentialVerifierService(stub, { timing: true }).verifyCredential(issueCredential());
+      expect(result.reason).to.equal('ISSUER_DID_INACTIVE_OR_UNKNOWN');
+      expect(result.timings).to.have.property('V5');
+      expect(result.timings).to.not.have.property('V6');
+    });
+
+    it('returns an error code, never the error message, when a read fails', async function () {
+      const failing = {
+        provider: { getBlockNumber: async () => 1 },
+        async verifyDID() {
+          const error = new Error('missing response (url="https://rpc.example/v3/FAKETOKEN")');
+          error.code = 'SERVER_ERROR';
+          error.url = 'https://rpc.example/v3/FAKETOKEN';
+          throw error;
+        },
+      };
+      const result = await new CredentialVerifierService(failing).verifyCredential(issueCredential());
+      expect(result.reason).to.equal('VERIFICATION_ERROR');
+      expect(result.errorCode).to.equal('SERVER_ERROR');
+      expect(JSON.stringify(result)).to.not.match(/https?:|FAKETOKEN/);
+
+      failing.verifyDID = async () => {
+        const error = new Error('boom');
+        error.code = 'see https://rpc.example/v3/FAKETOKEN';
+        throw error;
+      };
+      const odd = await new CredentialVerifierService(failing).verifyCredential(issueCredential());
+      expect(odd.errorCode).to.equal('UNKNOWN_ERROR');
+      expect(JSON.stringify(odd)).to.not.match(/https?:|FAKETOKEN/);
+    });
+  });
+
+  describe('eddsa-jcs-2022 (D11)', function () {
+    const vector = require('./fixtures/eddsa-jcs-2022-B3.json');
+
+    it('reproduces the W3C test vector (B.3) and verifies it', function () {
+      const proof = VerifiableCredentialService.createProof(
+        vector.unsecuredDocument, vector.proofOptions, vector.keyPair.secretKeyMultibase
+      );
+      expect(proof.proofValue).to.equal(vector.expected.proofValue);
+      expect(proof['@context']).to.deep.equal(vector.unsecuredDocument['@context']);
+      expect(VerifiableCredentialService.verifyProof(
+        { ...vector.unsecuredDocument, proof }, vector.keyPair.publicKeyMultibase
+      )).to.equal(true);
+    });
+
+    it('puts the document @context into the proof of an issued credential', function () {
+      const credential = issueCredential();
+      expect(credential.proof['@context']).to.deep.equal(credential['@context']);
+    });
+
+    it('fails when the document @context no longer starts with the proof @context', async function () {
+      const credential = issueCredential();
+      credential['@context'] = [credential['@context'][1], credential['@context'][0]];
+      expect((await verifierService.verifyCredential(credential)).reason).to.equal('INVALID_SIGNATURE');
+    });
+
+    for (const [field, value] of [
+      ['type', 'Ed25519Signature2020'],
+      ['cryptosuite', 'eddsa-rdfc-2022'],
+      ['proofPurpose', 'authentication'],
+    ]) {
+      it(`fails when proof.${field} is ${value}`, async function () {
+        const credential = issueCredential();
+        credential.proof[field] = value;
+        expect((await verifierService.verifyCredential(credential)).reason).to.equal('INVALID_SIGNATURE');
+      });
+    }
+
+    it('still verifies a credential signed the version 1.0.0 way (no proof @context)', async function () {
+      const crypto = require('crypto');
+      const { base58btc, canonicalize } = require('../src/vc/vc-service');
+      const sha = (text) => crypto.createHash('sha256').update(Buffer.from(text, 'utf8')).digest();
+      const { proof, ...unsecured } = issueCredential();
+      const { proofValue, '@context': proofContext, ...legacyConfig } = proof;
+      const signature = crypto.sign(
+        null,
+        Buffer.concat([sha(canonicalize(legacyConfig)), sha(canonicalize(unsecured))]),
+        VerifiableCredentialService.importPrivateKey(issuerKeys.privateKeyMultibase)
+      );
+      const legacy = { ...unsecured, proof: { ...legacyConfig, proofValue: `z${base58btc(signature)}` } };
+      expect(legacy.proof).to.not.have.property('@context');
+      expect((await verifierService.verifyCredential(legacy)).reason).to.equal('VALID');
+    });
   });
 });

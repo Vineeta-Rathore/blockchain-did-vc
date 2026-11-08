@@ -118,6 +118,21 @@ function credentialPayload(credential) {
   return payload;
 }
 
+function toArray(value) {
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function sha256(text) {
+  return crypto.createHash('sha256').update(Buffer.from(text, 'utf8')).digest();
+}
+
+// eddsa-jcs-2022 sections 3.3.3-3.3.5: JCS-canonicalise the proof configuration and the document, hash each with
+// SHA-256, and concatenate the proof configuration hash followed by the document hash.
+function eddsaJcsHashData(unsecuredDocument, proofConfig) {
+  return Buffer.concat([sha256(canonicalize(proofConfig)), sha256(canonicalize(unsecuredDocument))]);
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -212,61 +227,76 @@ class VerifiableCredentialService {
       },
     };
 
-    // eddsa-jcs-2022 §4.1: build proof configuration, canonicalize both
-    // documents independently, hash each with SHA-256, concatenate, then sign.
-    const proofConfig = {
+    const proof = this.createProof(credential, {
       type: 'DataIntegrityProof',
       cryptosuite: 'eddsa-jcs-2022',
       created: nowIso(),
       verificationMethod: verificationMethod.id || verificationMethod,
       proofPurpose: 'assertionMethod',
-    };
-
-    const proofConfigHash = crypto
-      .createHash('sha256')
-      .update(Buffer.from(canonicalize(proofConfig), 'utf8'))
-      .digest();
-
-    const documentHash = crypto
-      .createHash('sha256')
-      .update(Buffer.from(canonicalize(credential), 'utf8'))
-      .digest();
-
-    const hashData = Buffer.concat([proofConfigHash, documentHash]);
-    const proofValue = `z${base58btc(crypto.sign(null, hashData, this.importPrivateKey(privateKeyMultibase)))}`;
+    }, privateKeyMultibase);
 
     return {
       ...credential,
-      proof: { ...proofConfig, proofValue },
+      proof,
     };
   }
 
-  static verifySignature(credential, publicKeyMultibase) {
-    if (!credential || !credential.proof || !credential.proof.proofValue) {
+  /**
+   * eddsa-jcs-2022 Create Proof (Data Integrity EdDSA Cryptosuites v1.0, W3C Recommendation 15 May 2025,
+   * section 3.3.1). Returns the proof, including proof.@context (step 2) and proofValue.
+   */
+  static createProof(unsecuredDocument, options, privateKeyMultibase) {
+    if (!options || options.type !== 'DataIntegrityProof' || options.cryptosuite !== 'eddsa-jcs-2022') {
+      throw new Error('PROOF_GENERATION_ERROR');
+    }
+    const proof = { ...options };
+    if (unsecuredDocument['@context'] !== undefined) {
+      proof['@context'] = unsecuredDocument['@context'];
+    }
+    const hashData = eddsaJcsHashData(unsecuredDocument, proof);
+    proof.proofValue = `z${base58btc(crypto.sign(null, hashData, this.importPrivateKey(privateKeyMultibase)))}`;
+    return proof;
+  }
+
+  /**
+   * eddsa-jcs-2022 Verify Proof (section 3.3.2). Returns true only if the proof verifies.
+   * Proofs without proof.@context (as issued by version 1.0.0 of this artifact) still verify.
+   */
+  static verifyProof(securedDocument, publicKeyMultibase) {
+    if (!securedDocument || !securedDocument.proof || typeof securedDocument.proof.proofValue !== 'string') {
       return false;
     }
+    const { proof, ...unsecuredDocument } = securedDocument;
+    const { proofValue, ...proofOptions } = proof;
+    if (proofOptions.type !== 'DataIntegrityProof' || proofOptions.cryptosuite !== 'eddsa-jcs-2022' ||
+        !proofValue.startsWith('z')) {
+      return false;
+    }
+    if (proofOptions['@context'] !== undefined) {
+      const documentContext = toArray(securedDocument['@context']);
+      const proofContext = toArray(proofOptions['@context']);
+      const isPrefix = proofContext.length <= documentContext.length &&
+        proofContext.every((value, i) => canonicalize(value) === canonicalize(documentContext[i]));
+      if (!isPrefix) {
+        return false;
+      }
+      unsecuredDocument['@context'] = proofOptions['@context'];
+    }
+    try {
+      return crypto.verify(
+        null,
+        eddsaJcsHashData(unsecuredDocument, proofOptions),
+        this.importPublicKey(publicKeyMultibase),
+        fromBase58btc(proofValue.slice(1))
+      );
+    } catch {
+      return false;
+    }
+  }
 
-    // Reconstruct proof configuration (identical fields, no proofValue)
-    const { proofValue, ...proofConfig } = credential.proof;
-
-    const proofConfigHash = crypto
-      .createHash('sha256')
-      .update(Buffer.from(canonicalize(proofConfig), 'utf8'))
-      .digest();
-
-    const documentHash = crypto
-      .createHash('sha256')
-      .update(Buffer.from(canonicalize(credentialPayload(credential)), 'utf8'))
-      .digest();
-
-    const hashData = Buffer.concat([proofConfigHash, documentHash]);
-
-    return crypto.verify(
-      null,
-      hashData,
-      this.importPublicKey(publicKeyMultibase),
-      fromBase58btc(proofValue.replace(/^z/, ''))
-    );
+  // Kept for callers of version 1.0.0.
+  static verifySignature(credential, publicKeyMultibase) {
+    return this.verifyProof(credential, publicKeyMultibase);
   }
 
   static canonicalizeCredential(credential) {
@@ -276,6 +306,7 @@ class VerifiableCredentialService {
 
 module.exports = {
   VerifiableCredentialService,
+  base58btc,
   canonicalize,
   credentialPayload,
   rawEd25519PublicKeyFromMultibase,

@@ -1,0 +1,2 @@
+# The W3C test-vector fixture must stay byte-identical (its SHA-256 identifies the one allowed key in the secret scans).
+test/fixtures/eddsa-jcs-2022-B3.json -text

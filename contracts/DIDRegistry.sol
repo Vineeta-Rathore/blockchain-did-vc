@@ -3,8 +3,11 @@ pragma solidity ^0.8.19;
 
 /**
  * @title DIDRegistry
- * @notice Enhanced Decentralized Identifier (DID) Registry with full W3C DID compliance
- * @dev Implements DID creation, resolution, updates, revocation, and key rotation
+ * @notice Registry of DID documents with controller-authorised updates, key rotation and
+ *         deactivation, and per-credential revocation keyed by the issuer DID.
+ * @dev Administrators can pause registration and document changes, but not revocation or
+ *      deactivation, and every administrator action emits an event. Revocation records carry
+ *      an RFC 5280 (section 5.3.1) reason code instead of free text.
  */
 contract DIDRegistry {
     
@@ -32,7 +35,7 @@ contract DIDRegistry {
     struct RevocationEntry {
         string credentialId;
         uint256 revokedAt;
-        string reason;
+        uint8 reasonCode;                   // RFC 5280 section 5.3.1 code; 0 = not stated
         bool isRevoked;
     }
 
@@ -115,7 +118,7 @@ contract DIDRegistry {
     event CredentialRevoked(
         string indexed didId,
         string indexed credentialId,
-        string reason,
+        uint8 reasonCode,
         uint256 timestamp
     );
     
@@ -138,6 +141,14 @@ contract DIDRegistry {
         bytes value,
         uint256 timestamp
     );
+
+    event AdminAdded(address indexed admin, address indexed by);
+
+    event AdminRemoved(address indexed admin, address indexed by);
+
+    event Paused(address indexed by);
+
+    event Unpaused(address indexed by);
 
     // ========== MODIFIERS ==========
     
@@ -233,6 +244,8 @@ contract DIDRegistry {
 
     /**
      * @notice Update DID document
+     * @dev Allowed while the DID is deactivated, so that a controller can replace keys before
+     *      reactivating it. The authentication methods follow the new verification methods.
      * @param _didId DID to update
      * @param _verificationMethods New verification methods
      * @param _services New services
@@ -243,15 +256,15 @@ contract DIDRegistry {
         string[] memory _verificationMethods,
         string[] memory _services,
         bytes32 _dataHash
-    ) external 
-        whenNotPaused 
-        didExists(_didId) 
-        didActive(_didId) 
-        onlyController(_didId) 
+    ) external
+        whenNotPaused
+        didExists(_didId)
+        onlyController(_didId)
     {
         DIDDocument storage doc = didDocuments[_didId];
-        
+
         doc.verificationMethods = _verificationMethods;
+        doc.authenticationMethods = _verificationMethods;
         doc.services = _services;
         doc.dataHash = _dataHash;
         doc.updated = block.timestamp;
@@ -262,11 +275,11 @@ contract DIDRegistry {
 
     /**
      * @notice Deactivate a DID (soft delete)
+     * @dev Not blocked by pause(), so that a controller can always deactivate.
      * @param _didId DID to deactivate
      */
-    function deactivateDID(string memory _didId) 
-        external 
-        whenNotPaused
+    function deactivateDID(string memory _didId)
+        external
         didExists(_didId)
         onlyController(_didId) 
     {
@@ -326,6 +339,9 @@ contract DIDRegistry {
 
     /**
      * @notice Rotate a verification key
+     * @dev Allowed while the DID is deactivated, so that a controller can replace a leaked key
+     *      before reactivating it. The old key is also replaced wherever it appears among the
+     *      authentication methods.
      * @param _didId DID to update
      * @param _keyIndex Index of key to rotate
      * @param _newKey New key value
@@ -334,17 +350,22 @@ contract DIDRegistry {
         string memory _didId,
         uint256 _keyIndex,
         string memory _newKey
-    ) external 
+    ) external
         whenNotPaused
         didExists(_didId)
-        didActive(_didId)
-        onlyController(_didId) 
+        onlyController(_didId)
     {
         DIDDocument storage doc = didDocuments[_didId];
         require(_keyIndex < doc.verificationMethods.length, "DIDRegistry: Invalid key index");
-        
+
         string memory oldKey = doc.verificationMethods[_keyIndex];
         doc.verificationMethods[_keyIndex] = _newKey;
+        bytes32 oldKeyHash = keccak256(bytes(oldKey));
+        for (uint256 i = 0; i < doc.authenticationMethods.length; i++) {
+            if (keccak256(bytes(doc.authenticationMethods[i])) == oldKeyHash) {
+                doc.authenticationMethods[i] = _newKey;
+            }
+        }
         doc.updated = block.timestamp;
         doc.nonce++;
         
@@ -406,32 +427,38 @@ contract DIDRegistry {
 
     /**
      * @notice Revoke a credential
+     * @dev Not blocked by pause(), so that an issuer can always revoke. A revocation is final.
+     *      Accepted reason codes follow RFC 5280 section 5.3.1 (CRLReason): 0 unspecified, used
+     *      here to mean "not stated"; 1 keyCompromise; 2 cACompromise; 3 affiliationChanged;
+     *      4 superseded; 5 cessationOfOperation; 9 privilegeWithdrawn; 10 aACompromise.
+     *      Rejected: 6 certificateHold (revocation here cannot be undone), 7 (not used in
+     *      RFC 5280), 8 removeFromCRL (delta CRLs only) and any value above 10.
      * @param _didId Issuer's DID
      * @param _credentialId Credential to revoke
-     * @param _reason Revocation reason
+     * @param _reasonCode RFC 5280 reason code, 0 if not stated
      */
     function revokeCredential(
         string memory _didId,
         string memory _credentialId,
-        string memory _reason
-    ) external 
-        whenNotPaused
+        uint8 _reasonCode
+    ) external
         didExists(_didId)
-        onlyController(_didId) 
+        onlyController(_didId)
     {
+        require(_isValidReasonCode(_reasonCode), "DIDRegistry: Invalid reason code");
         require(
             !revocations[_didId][_credentialId].isRevoked,
             "DIDRegistry: Already revoked"
         );
-        
+
         revocations[_didId][_credentialId] = RevocationEntry({
             credentialId: _credentialId,
             revokedAt: block.timestamp,
-            reason: _reason,
+            reasonCode: _reasonCode,
             isRevoked: true
         });
-        
-        emit CredentialRevoked(_didId, _credentialId, _reason, block.timestamp);
+
+        emit CredentialRevoked(_didId, _credentialId, _reasonCode, block.timestamp);
     }
 
     /**
@@ -574,23 +601,38 @@ contract DIDRegistry {
     
     function addAdmin(address _admin) external onlyAdmin {
         isAdmin[_admin] = true;
+        emit AdminAdded(_admin, msg.sender);
     }
-    
+
     function removeAdmin(address _admin) external onlyAdmin {
         require(_admin != owner, "DIDRegistry: Cannot remove owner");
         isAdmin[_admin] = false;
+        emit AdminRemoved(_admin, msg.sender);
     }
-    
+
+    /**
+     * @notice Pause registration and document changes
+     * @dev revokeCredential and deactivateDID stay available while paused.
+     */
     function pause() external onlyAdmin {
         paused = true;
+        emit Paused(msg.sender);
     }
-    
+
     function unpause() external onlyAdmin {
         paused = false;
+        emit Unpaused(msg.sender);
     }
 
     // ========== INTERNAL HELPERS ==========
-    
+
+    /**
+     * @notice Whether a reason code is accepted (see revokeCredential)
+     */
+    function _isValidReasonCode(uint8 _code) internal pure returns (bool) {
+        return _code <= 10 && _code != 6 && _code != 7 && _code != 8;
+    }
+
     function _removeFromControllerList(address _controller, string memory _didId) internal {
         string[] storage dids = controllerDIDs[_controller];
         for (uint i = 0; i < dids.length; i++) {

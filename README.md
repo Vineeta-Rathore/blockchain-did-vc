@@ -43,8 +43,8 @@ does not reproduce its bytecode; its interface is the version 1.0.0 ABI ([`resul
 
 - Node.js 20 or later (Hardhat's simulator, EDR, needs it) and npm. Tested with Node.js 22.10.0 and npm 10.9.0 on
   Windows 11.
-- Python 3 with numpy, only for `scripts/check_stats_numpy.py`, and with matplotlib and numpy for
-  `scripts/plot-latency.py`.
+- Python 3 with numpy, only for `scripts/check_stats_numpy.py`, and with matplotlib, only for
+  `scripts/plot-latency.py` (tested with Python 3.12 and matplotlib 3.10.5).
 - For the Sepolia scripts only: an Ethereum Sepolia JSON-RPC endpoint; for `deploy-sepolia.js` also a funded Sepolia
   test key (never a key that holds real funds).
 

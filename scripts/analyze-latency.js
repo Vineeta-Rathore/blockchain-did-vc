@@ -29,7 +29,7 @@ function groupBy(rows, key) {
 }
 
 const r1 = (v) => (v === null || v === undefined ? 'n/a' : Number(v).toFixed(1));
-const r2 = (v) => Number(v).toFixed(2);
+const r2 = (v) => (v === null || v === undefined ? 'n/a' : Number(v).toFixed(2));
 
 function analyzeJuly(rows) {
   const run1 = rows.find((r) => r.kind === 'latency');
@@ -69,7 +69,8 @@ function analyzeJuly(rows) {
 }
 
 function analyzeLocal(rows) {
-  const timed = rows.filter((r) => r.kind === 'local' && !r.warmup);
+  const all = rows.filter((r) => r.kind === 'local' && !r.warmup);
+  const timed = all.filter((r) => r.valid === true && typeof r.total_ms === 'number' && Number.isFinite(r.total_ms));
   const totals = timed.map((r) => r.total_ms);
   const steps = {};
   for (const name of ['V1', 'B0', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8']) {
@@ -80,7 +81,7 @@ function analyzeLocal(rows) {
   for (const [p, rs] of groupBy(timed, (r) => r.process)) perProcess[p] = S.median(rs.map((r) => r.total_ms));
   const out = {
     log: 'measure-local.js (full verification pipeline, Hardhat in-process network)',
-    invalid: timed.filter((r) => !r.valid).length,
+    invalid: all.length - timed.length,
     total: S.summary(totals),
     steps,
     perProcessMedian: perProcess,
@@ -97,16 +98,53 @@ function analyzeLocal(rows) {
   return { out, lines };
 }
 
+// Requests a successful iteration of each mode sends (B0 plus the four reads; Bt's four reads travel in one batch).
+const EXPECTED_REQUESTS = {
+  P: { eth_blockNumber: 1, eth_call: 4 },
+  S: { eth_blockNumber: 1, eth_call: 4 },
+  C: { eth_blockNumber: 1, eth_call: 4 },
+  Bt: { eth_blockNumber: 1, batch: 1 },
+};
+
+// A row enters the statistics only if its measurement succeeded: P must be VALID, and S, C and Bt must have a time,
+// no error and answers that decode as expected. Failed rows are counted, by mode and error code, but never timed.
+function usable(r) {
+  if (typeof r.total_ms !== 'number' || !Number.isFinite(r.total_ms) || r.error) return false;
+  return r.mode === 'P' ? r.valid === true : r.sane === true;
+}
+
+function sameCounts(actual = {}, expected = {}) {
+  const keys = new Set([...Object.keys(actual), ...Object.keys(expected)]);
+  return [...keys].every((k) => (actual[k] || 0) === (expected[k] || 0));
+}
+
 function analyzeSepolia(rows) {
-  const timed = rows.filter((r) => r.kind === 'sepolia' && !r.warmup);
+  const measured = rows.filter((r) => r.kind === 'sepolia' && !r.warmup && EXPECTED_REQUESTS[r.mode]);
+  const pilotRowsIgnored = measured.filter((r) => r.pilot).length;
+  const runRows = measured.filter((r) => !r.pilot);
+  const timed = runRows.filter(usable);
+  const excluded = {};
+  for (const r of runRows.filter((x) => !usable(x))) {
+    const e = excluded[r.mode] || (excluded[r.mode] = { n: 0, codes: {} });
+    e.n += 1;
+    const code = r.error || r.reason || (r.sane === false ? 'DECODE_CHECK_FAILED' : 'NO_TIME');
+    e.codes[code] = (e.codes[code] || 0) + 1;
+  }
+  const requestAnomalies = {};
+  for (const r of timed) {
+    if (!sameCounts(r.requests, EXPECTED_REQUESTS[r.mode]) || (r.chainIdDuringTimer || 0) > 0) {
+      requestAnomalies[r.mode] = (requestAnomalies[r.mode] || 0) + 1;
+    }
+  }
   const byMode = groupBy(timed, (r) => r.mode);
   const modes = {};
   for (const [mode, rs] of byMode) modes[mode] = S.summary(rs.map((r) => r.total_ms));
-  const p = byMode.get('P') || [];
+  const p = (byMode.get('P') || []).filter((r) => Number.isFinite(r.b0_ms));
   const pMinusB0 = p.map((r) => r.total_ms - r.b0_ms);
-  const s = byMode.get('S') || [];
-  const sThreeReads = s.filter((r) => Array.isArray(r.reads_ms)).map((r) => r.total_ms - r.reads_ms[0]);
+  const s = (byMode.get('S') || []).filter((r) => Array.isArray(r.reads_ms) && Number.isFinite(r.reads_ms[0]));
+  const sThreeReads = s.map((r) => r.total_ms - r.reads_ms[0]);
   const key = (r) => `${r.block}:${r.iteration}`;
+  // Pairs only iterations in which both modes succeeded.
   const pairs = (a, b) => {
     const mb = new Map((byMode.get(b) || []).map((r) => [key(r), r]));
     const left = [];
@@ -123,11 +161,14 @@ function analyzeSepolia(rows) {
   for (const [blk, rs] of groupBy(timed, (r) => r.block)) {
     perBlock[blk] = Object.fromEntries([...groupBy(rs, (r) => r.mode)].map(([m, x]) => [m, S.median(x.map((r) => r.total_ms))]));
   }
-  const cold = rows.filter((r) => r.kind === 'sepolia' && r.coldStart).map((r) => r.cold_ms).filter((v) => v !== undefined);
-  const cache = rows.filter((r) => r.kind === 'cache_check');
+  const cold = rows.filter((r) => r.kind === 'sepolia' && r.coldStart && !r.pilot).map((r) => r.cold_ms).filter(Number.isFinite);
+  const cache = rows.filter((r) => r.kind === 'cache_check' && Number.isFinite(r.fresh_ms) && Number.isFinite(r.known_ms));
   const out = {
     log: 'measure-sepolia.js (Sepolia; P = full pipeline, S = four reads in sequence, C = concurrent, Bt = one batch)',
-    invalid: timed.filter((r) => r.mode === 'P' && !r.valid).length,
+    invalid: runRows.filter((r) => r.mode === 'P' && !r.valid).length,
+    excluded,
+    pilotRowsIgnored,
+    requestAnomalies,
     modes,
     P_minus_B0: pMinusB0.length ? S.summary(pMinusB0) : null,
     S_threeReads_derived: sThreeReads.length ? S.summary(sThreeReads) : null,
@@ -135,9 +176,18 @@ function analyzeSepolia(rows) {
     speedup_S_over_Bt: pairs('S', 'Bt'),
     perBlockMedian: perBlock,
     coldStart: cold.length ? S.summary(cold) : null,
-    cacheCheck: cache.length ? S.summary(cache.map((r) => r.fresh_ms)) : null,
+    cacheCheck: cache.length ? {
+      fresh: S.summary(cache.map((r) => r.fresh_ms)),
+      known: S.summary(cache.map((r) => r.known_ms)),
+      freshMinusKnown: S.summary(cache.map((r) => r.fresh_ms - r.known_ms)),
+    } : null,
   };
   const lines = [out.log, `P rows not valid: ${out.invalid}`];
+  for (const [m, e] of Object.entries(excluded)) {
+    lines.push(`${m}: ${e.n} row(s) excluded (${Object.entries(e.codes).map(([c, n]) => `${c} ${n}`).join(', ')})`);
+  }
+  if (pilotRowsIgnored) lines.push(`pilot rows ignored: ${pilotRowsIgnored}`);
+  for (const [m, n] of Object.entries(requestAnomalies)) lines.push(`${m}: ${n} row(s) with unexpected request counts or a chain-ID request`);
   for (const [m, v] of Object.entries(modes)) {
     lines.push(`${m}: n = ${v.n}, median ${r1(v.median)} ms [${r1(v.medianCI.lower)}, ${r1(v.medianCI.upper)}], ` +
       `Q1 ${r1(v.q1)}, Q3 ${r1(v.q3)}, p95 ${r1(v.p95)}, max ${r1(v.max)}`);
@@ -146,17 +196,21 @@ function analyzeSepolia(rows) {
   if (out.S_threeReads_derived) lines.push(`S without its V2 read (derived three-read figure): median ${r1(out.S_threeReads_derived.median)} ms`);
   for (const [name, v] of [['S/C', out.speedup_S_over_C], ['S/Bt', out.speedup_S_over_Bt]]) {
     if (v) {
-      lines.push(`${name} paired speed-up: median ${r2(v.medianOfRatios)} [${r2(v.bootstrap.lower)}, ${r2(v.bootstrap.upper)}] ` +
+      lines.push(`${name} paired speed-up (n = ${v.n}): median ${r2(v.medianOfRatios)} [${r2(v.bootstrap.lower)}, ${r2(v.bootstrap.upper)}] ` +
         `(seed ${v.bootstrap.seed}), range ${r2(v.min)}-${r2(v.max)}, ratio of medians ${r2(v.ratioOfMedians)}`);
     }
+  }
+  if (out.cacheCheck) {
+    lines.push(`cache check (n = ${out.cacheCheck.fresh.n}): fresh read median ${r1(out.cacheCheck.fresh.median)} ms, known read ` +
+      `${r1(out.cacheCheck.known.median)} ms, paired difference median ${r1(out.cacheCheck.freshMinusKnown.median)} ms`);
   }
   return { out, lines };
 }
 
 function main() {
   const args = process.argv.slice(2);
-  const file = args.find((a) => !a.startsWith('--'));
   const outIndex = args.indexOf('--out');
+  const file = args.find((a, i) => !a.startsWith('--') && !(outIndex >= 0 && i === outIndex + 1));
   if (!file) {
     console.error('usage: node scripts/analyze-latency.js <log.jsonl> [--out <summary.json>]');
     process.exit(2);
@@ -172,4 +226,6 @@ function main() {
   if (outIndex >= 0) fs.writeFileSync(args[outIndex + 1], `${JSON.stringify(result.out, null, 2)}\n`);
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { analyzeJuly, analyzeLocal, analyzeSepolia };

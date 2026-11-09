@@ -110,9 +110,24 @@ function rawEd25519SecretKeyFromMultibase(secretKeyMultibase) {
   return rawSecretKey;
 }
 
+// RFC 8785. Only JSON values can be canonicalised: undefined, functions, symbols, big integers, non-finite numbers
+// and strings with a lone surrogate are errors (RFC 8785 requires an error for the last two).
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
 function canonicalize(value) {
-  if (value === null || typeof value !== 'object') {
+  if (value === null || typeof value === 'boolean') {
     return JSON.stringify(value);
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('JCS: number is not finite');
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'string') {
+    if (LONE_SURROGATE.test(value)) throw new Error('JCS: lone surrogate');
+    return JSON.stringify(value);
+  }
+  if (typeof value !== 'object') {
+    throw new Error('JCS: not a JSON value');
   }
 
   if (Array.isArray(value)) {
@@ -121,7 +136,10 @@ function canonicalize(value) {
 
   return `{${Object.keys(value)
     .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalize(value[key])}`)
+    .map((key) => {
+      if (LONE_SURROGATE.test(key)) throw new Error('JCS: lone surrogate');
+      return `${JSON.stringify(key)}:${canonicalize(value[key])}`;
+    })
     .join(',')}}`;
 }
 
@@ -239,7 +257,10 @@ class VerifiableCredentialService {
       },
     };
 
-    const proof = this.createProof(credential, {
+    // Sign the credential as it will travel: JSON drops undefined values and turns dates into strings, so the signed
+    // bytes and the received bytes are the same.
+    const travelling = JSON.parse(JSON.stringify(credential));
+    const proof = this.createProof(travelling, {
       type: 'DataIntegrityProof',
       cryptosuite: 'eddsa-jcs-2022',
       created: nowIso(),
@@ -248,7 +269,7 @@ class VerifiableCredentialService {
     }, privateKeyMultibase);
 
     return {
-      ...credential,
+      ...travelling,
       proof,
     };
   }

@@ -92,6 +92,9 @@ function bootstrapCI(values, statistic, { resamples = 10000, seed = 20261111, al
 }
 
 function summary(values) {
+  if (!values.length || values.some((v) => typeof v !== 'number' || !Number.isFinite(v))) {
+    throw new Error('summary needs a non-empty list of finite numbers');
+  }
   const ci = medianCI(values);
   return {
     n: values.length,

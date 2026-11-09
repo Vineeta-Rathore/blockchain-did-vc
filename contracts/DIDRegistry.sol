@@ -360,11 +360,10 @@ contract DIDRegistry {
 
         string memory oldKey = doc.verificationMethods[_keyIndex];
         doc.verificationMethods[_keyIndex] = _newKey;
-        bytes32 oldKeyHash = keccak256(bytes(oldKey));
-        for (uint256 i = 0; i < doc.authenticationMethods.length; i++) {
-            if (keccak256(bytes(doc.authenticationMethods[i])) == oldKeyHash) {
-                doc.authenticationMethods[i] = _newKey;
-            }
+        // createDID and updateDID set the authentication methods to the verification methods, in the same order, so
+        // the entry at the same index is rotated; matching by value would also rewrite duplicates of the old key.
+        if (_keyIndex < doc.authenticationMethods.length) {
+            doc.authenticationMethods[_keyIndex] = _newKey;
         }
         doc.updated = block.timestamp;
         doc.nonce++;

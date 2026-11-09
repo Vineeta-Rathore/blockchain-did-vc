@@ -418,6 +418,56 @@ describe('DID and VC credential flow', function () {
         .to.equal('VERIFICATION_METHOD_NOT_FOUND');
     });
 
+    it('rejects impossible calendar dates and times', async function () {
+      for (const validUntil of ['2099-02-30T00:00:00Z', '2099-01-01T24:00:00Z', '2099-13-01T00:00:00Z', '2099-01-01T00:60:00Z']) {
+        expect(await reasonOf(resign({ ...issueCredential(), validUntil })), validUntil).to.equal('MALFORMED_CREDENTIAL');
+      }
+      expect(await reasonOf(resign({ ...issueCredential(), validUntil: '2096-02-29T23:59:59Z' }))).to.equal('VALID');
+    });
+
+    it('requires the issuer and the subject id to be strings', async function () {
+      const base = issueCredential();
+      expect(await reasonOf(resign({ ...base, issuer: { id: issuerDid } }))).to.equal('MALFORMED_CREDENTIAL');
+      expect(await reasonOf(resign({ ...base, credentialSubject: { ...base.credentialSubject, id: 7 } }))).to.equal('MALFORMED_CREDENTIAL');
+    });
+
+    it('judges the validity period at the moment reported as checkedAt', async function () {
+      const slow = {
+        provider: didRegistry.provider,
+        verifyDID: async (did, o) => { await new Promise((r) => setTimeout(r, 1500)); return didRegistry.verifyDID(did, o); },
+        getDIDDocument: (did, o) => didRegistry.getDIDDocument(did, o),
+        isCredentialRevoked: (did, id, o) => didRegistry.isCredentialRevoked(did, id, o),
+      };
+      const validUntil = new Date(Date.now() + 1000).toISOString();
+      const result = await new CredentialVerifierService(slow).verifyCredential(resign({ ...issueCredential(), validUntil }));
+      expect(Date.parse(result.checkedAt)).to.be.below(Date.parse(validUntil));
+      expect(result.reason).to.equal('VALID');
+    });
+
+    it('reads the newest block number with a plain eth_blockNumber request', async function () {
+      const sent = [];
+      const provider = {
+        send: async (method) => { sent.push(method); return '0x2a'; },
+        getBlockNumber: async () => { throw new Error('not to be used when send exists'); },
+      };
+      const stub = {
+        provider,
+        verifyDID: async () => true,
+        getDIDDocument: (did) => didRegistry.getDIDDocument(did),
+        isCredentialRevoked: async () => false,
+      };
+      const result = await new CredentialVerifierService(stub).verifyCredential(issueCredential());
+      expect(sent).to.deep.equal(['eth_blockNumber']);
+      expect(result.checkedAtBlock).to.equal(42);
+    });
+
+    it('issues only JSON values and refuses lone surrogates', function () {
+      const credential = issueCredential({ claims: { name: 'Verified Identity', dropped: undefined, when: new Date(0) } });
+      const roundTrip = JSON.parse(JSON.stringify(credential));
+      expect(VerifiableCredentialService.verifyProof(roundTrip, issuerKeys.publicKeyMultibase)).to.equal(true);
+      expect(() => issueCredential({ claims: { name: 'bad \ud800 value' } })).to.throw();
+    });
+
     it('rejects a public key without the multibase z prefix', function () {
       const credential = issueCredential();
       const key = issuerKeys.publicKeyMultibase;

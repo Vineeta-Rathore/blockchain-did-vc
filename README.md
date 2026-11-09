@@ -53,12 +53,12 @@ does not reproduce its bytecode; its interface is the version 1.0.0 ABI ([`resul
 ```bash
 npm ci                 # install the locked toolchain (Hardhat 2.29.0, ethers 5.8.0)
 npx hardhat compile    # solc 0.8.19, optimiser on, 200 runs
-npm test               # 110 tests
+npm test               # 122 tests
 npm run measure-gas    # gas of each operation, on the osaka schedule and on Sepolia's
 ```
 
-`npm test` runs five suites: the registry (43 tests), credentials and verification (45), leak tests (14), the RPC
-helpers' secret handling (6) and the gas model (2). The leak tests run every measurement mode, and both Sepolia
+`npm test` runs six suites: the registry (46 tests), credentials and verification (50), leak tests (14), the RPC
+helpers' secret handling (6), the latency analysis (4) and the gas model (2). The leak tests run every measurement mode, and both Sepolia
 scripts as child processes, against a local fake server that fails requests in eight ways, and check the raw rows,
 output, logs and records for the fake token, the URL path and the fake deployer key, and that no request is retried.
 
@@ -144,11 +144,11 @@ the credential's `@context` is copied into the proof before the proof configurat
 
 | Step | Check | Result if it fails |
 |---|---|---|
-| V1 | `@context` starts with the VC 2.0 base context and `type` includes `VerifiableCredential`; `id` (a non-empty string, because revocation is keyed by it), `issuer`, `credentialSubject.id` and `proof.verificationMethod` are present; the VC 1.1 properties `issuanceDate` and `expirationDate` are absent; `validFrom` and `validUntil`, if present, are date-time stamps with a time zone and `validUntil` is not earlier than `validFrom` | `MALFORMED_CREDENTIAL`, `MISSING_PROOF` |
-| B0 | read the newest block number N (or use the caller's block number, an integer 0 or more) | `VERIFICATION_ERROR` |
+| V1 | `@context` starts with the VC 2.0 base context and `type` includes `VerifiableCredential`; `id` (a non-empty string, because revocation is keyed by it), `issuer`, `credentialSubject.id` and `proof.verificationMethod` are present; the VC 1.1 properties `issuanceDate` and `expirationDate` are absent; `issuer` and `credentialSubject.id` are strings; `validFrom` and `validUntil`, if present, are date-time stamps with a time zone and a real calendar date, and `validUntil` is not earlier than `validFrom` | `MALFORMED_CREDENTIAL`, `MISSING_PROOF` |
+| B0 | read the newest block number N with a plain `eth_blockNumber` request (or use the caller's block number, an integer 0 or more) | `VERIFICATION_ERROR` |
 | V2 | the issuer DID exists and is active at block N | `ISSUER_DID_INACTIVE_OR_UNKNOWN` |
 | V3 | the subject DID exists and is active at block N | `SUBJECT_DID_INACTIVE_OR_UNKNOWN` |
-| V4 | `validFrom` is not later than now plus the clock tolerance (default 60 s); `validUntil` is later than now | `CREDENTIAL_NOT_YET_VALID`, `CREDENTIAL_EXPIRED` |
+| V4 | `validFrom` is not later than now plus the clock tolerance (default 60 s); `validUntil` is later than now ("now" is the moment reported as `checkedAt`) | `CREDENTIAL_NOT_YET_VALID`, `CREDENTIAL_EXPIRED` |
 | V5 | the issuer's DID document at block N is active, carries the issuer DID as its `id` and lists the proof's verification method, which is a `Multikey` controlled by the issuer DID and named under it | `ISSUER_DID_INACTIVE_OR_UNKNOWN`, `VERIFICATION_METHOD_NOT_FOUND` |
 | V6 | the proof has type `DataIntegrityProof`, cryptosuite `eddsa-jcs-2022` and purpose `assertionMethod`, and has not expired (`proof.expires`); the credential's `@context` equals the proof's; the Ed25519 signature is valid | `INVALID_SIGNATURE` |
 | V7 | the issuer has not revoked the credential at block N | `CREDENTIAL_REVOKED` |
@@ -184,13 +184,13 @@ verification method (the issuer's also one service entry):
 
 | Operation | osaka (Hardhat) | Glamsterdam (Sepolia) | New storage slots |
 |---|---|---|---|
-| Deployment (12,685 bytes of code) | 2,838,630 | 20,042,702 | 2 |
+| Deployment (12,581 bytes of code) | 2,816,124 | 19,881,858 | 2 |
 | `createDID`, a controller's first DID | 863,141 | 4,111,181 | 37 |
 | `createDID`, a controller's second DID | 689,311 | 3,240,891 | 29 |
 | `revokeCredential` (45-character credential ID, reason code 9) | 145,713 | 579,513 | 5 |
 
 The Glamsterdam column is computed by `scripts/lib/gas-schedule.js` from the storage writes of each local
-transaction. It matched the gas that Sepolia reported for the same calls (`eth_simulateV1`, 8 November 2026)
+transaction. It matched the gas that Sepolia reported for the same calls (`eth_simulateV1`, 8 and 9 November 2026)
 exactly; `test/GasSchedule.test.js` checks this. The three EIPs were in Last Call at that date and may still change
 before they reach mainnet. The gas of the actual Sepolia deployment is in `results/sepolia_v1.1_deployment.json`
 (to be added).
@@ -211,7 +211,9 @@ before they reach mainnet. The gas of the actual Sepolia deployment is in `resul
 On Windows PowerShell, set the variables first: `$env:LOCAL_LOG = "results/local_<date>_n100.jsonl";
 $env:PROCESS_INDEX = "1"; npx hardhat run scripts/measure-local.js`.
 
-`scripts/lib/stats.js` defines every statistic once: the conventional median, quartiles by the Hyndman and Fan type 7
+`analyze-latency.js` counts only measurements that succeeded (a valid verification, or reads with a time, no error
+and the expected answers) and leaves out pilot rows; it reports the rows it left out, by mode and error code, and rows
+with unexpected request counts. `scripts/lib/stats.js` defines every statistic once: the conventional median, quartiles by the Hyndman and Fan type 7
 rule, the nearest-rank 95th percentile, an order-statistic confidence interval for the median, and a seeded percentile
 bootstrap for paired speed-ups only. Each log, and what produced it, is described in
 [`results/README.md`](results/README.md).
@@ -222,11 +224,16 @@ The two Sepolia scripts run with plain Node, not through Hardhat, and no Hardhat
 
 - `measure-sepolia.js` is read-only: no signer, no transaction. It times the full verification (mode P) and the four
   contract reads sent in sequence (S), concurrently (C) and as one JSON-RPC batch (Bt), in a rotating order, at ten
-  fixed times of day (machine local time). `--pilot` runs three labelled iterations.
+  fixed times of day (machine local time). Warm-up and timed iterations rotate through the four mode orders
+  separately, so the 100 timed iterations use each order 25 times. A block that cannot start within two minutes of its
+  time, also after the machine slept, is logged as missed. `--pilot` runs three labelled iterations.
 - `deploy-sepolia.js` deploys the contract, registers an issuer DID and a subject DID with fresh Ed25519 keys, signs
-  two credentials and revokes one of them with reason code 9. Each step's nonce is saved in the record before its
-  transaction is sent, and the hash right after; a re-run waits for that transaction, or sends the step again with the
-  same nonce (`--resend`, to replace a stuck one), which the chain accepts only once. A re-run also stops if the record
+  two credentials and revokes one of them with reason code 9. Each step's nonce is saved in the record first; each
+  transaction is then signed, and its hash and raw form are saved before it is broadcast. A re-run looks for a receipt
+  of any transaction sent for the step and otherwise broadcasts the saved one again; `--resend` signs a replacement
+  with the same nonce and current fees, and whichever is mined is recorded. A failed transaction (status 0) is
+  recorded and its step starts again. One run at a time (a lock file next to the record, removed by hand if a run is
+  killed); a completed record is left untouched. A re-run also stops if the record
   belongs to another chain or deployer, if the code at the recorded address differs from the compiled contract, if a
   DID is controlled by another address, or if the issuer key no longer matches the recorded inputs. Only Sepolia and
   local Hardhat chains are accepted. It sets fees explicitly (a 0.01 gwei priority fee and a

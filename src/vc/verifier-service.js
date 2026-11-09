@@ -8,10 +8,17 @@ const VC_V2_CONTEXT = 'https://www.w3.org/ns/credentials/v2';
 // VC 2.0 (section 4.9) requires validFrom and validUntil to be XML Schema dateTimeStamp values: a date, a time and a
 // time zone. Anything else (no time zone, which Date.parse would read in the verifier's local zone, or other formats
 // Date.parse accepts) is rejected.
-const DATE_TIME_STAMP = /^-?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+// Date.parse rolls impossible dates over (2026-02-30 becomes 2026-03-02), so the fields are checked as well.
+const DATE_TIME_STAMP = /^(-?\d{4,})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-](\d{2}):(\d{2}))$/;
 
 function isValidDate(value) {
-  return typeof value === 'string' && DATE_TIME_STAMP.test(value) && !Number.isNaN(Date.parse(value));
+  const m = typeof value === 'string' && DATE_TIME_STAMP.exec(value);
+  if (!m) return false;
+  const [year, month, day, hour, minute, second] = m.slice(1, 7).map(Number);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59) return false;
+  if (m[9] !== undefined && (Number(m[9]) > 14 || Number(m[10]) > 59)) return false;
+  return !Number.isNaN(Date.parse(value));
 }
 
 function isNonNegativeInteger(value) {
@@ -54,7 +61,9 @@ class CredentialVerifierService {
    * describes the same chain state. Unless options.blockTag is given, step B0 reads the newest block number.
    */
   async verifyCredential(credential, options = {}) {
-    const checkedAt = new Date().toISOString();
+    // One moment for the whole verification: the validity period (V4) is judged at the time reported as checkedAt.
+    const nowMs = Date.now();
+    const checkedAt = new Date(nowMs).toISOString();
     const timings = this.timing ? {} : null;
     let checkedAtBlock = null;
     let mark = this.timing ? process.hrtime.bigint() : null;
@@ -70,7 +79,8 @@ class CredentialVerifierService {
       // V1: structure and validity dates. Revocation is keyed by the credential id, so a credential without a
       // non-empty string id cannot be checked at V7 and is rejected here.
       if (!credential || typeof credential.id !== 'string' || credential.id === '' ||
-          !credential.issuer || !credential.credentialSubject?.id) {
+          typeof credential.issuer !== 'string' || credential.issuer === '' ||
+          typeof credential.credentialSubject?.id !== 'string' || credential.credentialSubject.id === '') {
         step('V1');
         return done(false, 'MALFORMED_CREDENTIAL');
       }
@@ -108,7 +118,12 @@ class CredentialVerifierService {
         }
         checkedAtBlock = options.blockTag;
       } else {
-        checkedAtBlock = Math.max(0, (await this.provider.getBlockNumber()) - this.blockLag);
+        // A plain eth_blockNumber request: ethers' getBlockNumber() never goes below the highest number it has seen,
+        // which can pin the reads to a block that the node answering them does not have yet.
+        const newest = typeof this.provider.send === 'function'
+          ? Number.parseInt(await this.provider.send('eth_blockNumber', []), 16)
+          : await this.provider.getBlockNumber();
+        checkedAtBlock = Math.max(0, newest - this.blockLag);
       }
       const at = { blockTag: checkedAtBlock };
       step('B0');
@@ -128,7 +143,7 @@ class CredentialVerifierService {
       step('V3');
 
       // V4: validity period (validFrom with the clock tolerance, then validUntil)
-      const now = Date.now();
+      const now = nowMs;
       if (validFrom !== undefined && Date.parse(validFrom) > now + this.clockToleranceMs) {
         step('V4');
         return done(false, 'CREDENTIAL_NOT_YET_VALID');

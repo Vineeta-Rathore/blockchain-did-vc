@@ -10,7 +10,7 @@
 //   EIP-2780 (intrinsic gas): 15000 for a call to an existing contract (was 21000), 24000 for a contract creation
 //     (was 53000).
 // Calldata, cold storage access (2100) and warm access (100) are unchanged for these transactions. With these values,
-// glamsterdamGas() reproduced the gas that eth_simulateV1 reported on Sepolia on 8 Nov 2026 exactly, for the
+// glamsterdamGas() reproduced the gas that eth_simulateV1 reported on Sepolia on 8 and 9 Nov 2026 exactly, for the
 // deployment, both createDID calls and revokeCredential of scripts/measure-gas.js (test/GasSchedule.test.js). The
 // EIPs were in Last Call at that date; the deployment record holds the gas actually used.
 const { ethers } = require('ethers');

@@ -4,11 +4,11 @@ const { seededGasInputs } = require('../scripts/lib/fixtures');
 const { GLAMSTERDAM, OSAKA, glamsterdamGas, storageWrites } = require('../scripts/lib/gas-schedule');
 
 // Gas of the seeded inputs of scripts/measure-gas.js (case 1): on the Hardhat network (osaka), and on Sepolia as
-// reported by eth_simulateV1 on 8 Nov 2026 (base block 12090651, sender 0x1Af22bC52FB82C57Fb210536462D6b857A3C073f,
+// reported by eth_simulateV1 on 8 and 9 Nov 2026 (base blocks 12090651 and, for the deployment, 12095030, sender 0x1Af22bC52FB82C57Fb210536462D6b857A3C073f,
 // registry code placed by a state override). The model in scripts/lib/gas-schedule.js must give the Sepolia values
 // from the local storage writes.
-const OSAKA_GAS = { deploy: 2838630, createIssuer: 863141, createSubject: 689311, revoke: 145713 };
-const SEPOLIA_2026_11_08 = { deploy: 20042702, createIssuer: 4111181, createSubject: 3240891, revoke: 579513 };
+const OSAKA_GAS = { deploy: 2816124, createIssuer: 863141, createSubject: 689311, revoke: 145713 };
+const SEPOLIA_2026_11_08 = { deploy: 19881858, createIssuer: 4111181, createSubject: 3240891, revoke: 579513 };
 
 describe('Gas schedule (osaka on Hardhat, Glamsterdam on Sepolia)', function () {
   it('reproduces the Sepolia gas of all four operations from the local storage writes', async function () {

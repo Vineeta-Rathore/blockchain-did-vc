@@ -99,7 +99,10 @@ async function main() {
   }
   if (pilot) blocks = [{ block: 0, slot: 'pilot' }];
 
-  let iterationCounter = 0;
+  // Separate rotation counters for warm-up and timed iterations, so that over the ten blocks (100 timed iterations)
+  // each of the four mode orders is used exactly 25 times.
+  let warmupCounter = 0;
+  let timedCounter = 0;
   for (const b of blocks) {
     if (!pilot && !flag('--no-wait')) {
       const start = slotDate(b.slot).getTime();
@@ -109,19 +112,25 @@ async function main() {
         continue;
       }
       while (Date.now() < start) await sleep(Math.min(30000, start - Date.now()));
+      // The machine may have slept through the slot: a block that cannot start within its window is missed.
+      if (Date.now() > start + START_WINDOW_MS) {
+        write({ kind: 'block_missed', block: b.block, slot: b.slot, late: true });
+        say(`block ${b.block} (${b.slot}) missed (started too late)`);
+        continue;
+      }
     }
     const startedAt = new Date().toISOString();
     const cold = await M.coldStart(provider);
     write({ kind: 'sepolia', mode: 'cold', block: b.block, slot: b.slot, coldStart: true, warmup: true, ...cold, at: startedAt });
     const total = (pilot ? 0 : WARMUP) + (pilot ? 3 : TIMED);
     for (let i = 0; i < total; i++) {
-      const order = M.ORDERS[iterationCounter % M.ORDERS.length];
-      iterationCounter += 1;
+      const warm = !pilot && i < WARMUP;
+      const order = M.ORDERS[(warm ? warmupCounter++ : timedCounter++) % M.ORDERS.length];
       for (const mode of order) {
         const r = await M.runMode(mode, ctx);
         write({
           kind: 'sepolia', block: b.block, slot: b.slot, ...(b.reserve ? { reserve: true } : {}),
-          iteration: i + 1, warmup: !pilot && i < WARMUP, pilot, order: order.join(','), ...r,
+          iteration: i + 1, warmup: warm, pilot, order: order.join(','), ...r,
         });
       }
     }

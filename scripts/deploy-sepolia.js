@@ -5,9 +5,11 @@
  * revoke A with reason code 9 (privilegeWithdrawn). Plain Node; the deployer key comes from --key <file> (never from
  * .env, which is read only for SEPOLIA_RPC_URL).
  *
- * Resumable without repeating a transaction. Each step's nonce is saved in the record before the transaction is sent,
- * and its hash right after. A re-run waits for that transaction, or sends the step again with the same nonce, which
- * the chain can accept only once; it never sends a second transaction for a step under a new nonce. Before any write,
+ * Resumable without repeating a transaction. Each step's nonce is saved in the record first; each transaction is then
+ * signed, and its hash and raw form are saved before it is broadcast. A re-run looks for a receipt of any transaction
+ * sent for the step, broadcasts the saved one again if none is mined, and never sends a second transaction for a step
+ * under a new nonce (a failed transaction, status 0, is recorded and its step starts again). One run at a time
+ * (a lock file next to the record); a completed record is left untouched. Before any write,
  * a re-run also checks that the record belongs to this chain and deployer, that the contract's code equals the
  * compiled artifact, that both DIDs are controlled by the deployer with the recorded documents, and that the issuer
  * key matches the recorded inputs.
@@ -17,8 +19,8 @@
  *        [--out results/sepolia_v1.1_deployment.json] [--secrets-dir <dir outside any git tree>]
  *        [--tip-gwei 0.01] [--max-base-fee-gwei 1] [--wait-timeout-s 600] [--resend]
  *
- * --resend sends a step that is still pending again, with the same nonce and the current fees (to replace a stuck
- * transaction). The issuer's private key is written once to <secrets-dir>/issuer_v1.1.json and never printed; it is
+ * --resend signs a pending step again, with the same nonce and the current fees (to replace a stuck transaction);
+ * whichever of the two is mined is recorded. The issuer's private key is written once to <secrets-dir>/issuer_v1.1.json and never printed; it is
  * needed only until the credentials are signed, and is deleted after the deployment gate. The subject's private key
  * is never stored. The record written to --out holds no secret. The key file and the secrets directory must lie
  * outside every git working tree. --expect-chain accepts only Sepolia (the default) and local Hardhat chains.
@@ -107,6 +109,23 @@ async function main() {
   const balance = await wallet.getBalance();
   say(`deployer ${wallet.address}, balance ${ethers.utils.formatEther(balance)} ETH, chain ${chainId}`);
 
+  // One run at a time for a record. A run that is killed leaves the lock file, which is then removed by hand.
+  const lockPath = `${outPath}.lock`;
+  let lockFd;
+  try {
+    lockFd = fs.openSync(lockPath, 'wx');
+  } catch {
+    throw fail('RECORD_LOCKED');
+  }
+  process.on('exit', () => {
+    try {
+      fs.closeSync(lockFd);
+      fs.unlinkSync(lockPath);
+    } catch {
+      // nothing to clean
+    }
+  });
+
   const artifact = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'artifacts', 'contracts', 'DIDRegistry.sol', 'DIDRegistry.json'), 'utf8'));
   const state = fs.existsSync(outPath)
     ? JSON.parse(fs.readFileSync(outPath, 'utf8'))
@@ -115,6 +134,10 @@ async function main() {
   if (state.chainId !== chainId) throw fail('CHAIN_MISMATCH');
   state.txs = state.txs || {};
   state.pending = state.pending || {};
+  if (state.completedAt) {
+    say(`setup already complete (${state.completedAt}); the record is left as it is`);
+    return;
+  }
   state.feePolicy = fees.describe;
   const save = () => {
     const text = `${JSON.stringify(state, null, 2)}\n`;
@@ -123,63 +146,100 @@ async function main() {
     fs.writeFileSync(outPath, text);
   };
 
+  const sleep = (t) => new Promise((resolve) => setTimeout(resolve, t));
+  const minedReceipt = async (pending) => {
+    for (const hash of pending.hashes) {
+      const receipt = await provider.getTransactionReceipt(hash);
+      if (receipt && receipt.blockNumber !== null && receipt.blockNumber !== undefined) return receipt;
+    }
+    return null;
+  };
+
   const finish = async (name, receipt, isDone) => {
-    if (!receipt) throw fail('TX_NOT_MINED');
-    if (receipt.status !== 1) throw fail('TX_FAILED');
-    state.txs[name] = { hash: receipt.transactionHash, nonce: state.pending[name].nonce, block: receipt.blockNumber,
+    const pending = state.pending[name];
+    const entry = { hash: receipt.transactionHash, nonce: pending.nonce, block: receipt.blockNumber,
       gasUsed: receipt.gasUsed.toNumber(), effectiveGasPrice: receipt.effectiveGasPrice ? receipt.effectiveGasPrice.toString() : null,
-      status: receipt.status };
+      status: receipt.status, fees: pending.fees };
     delete state.pending[name];
+    if (receipt.status !== 1) {
+      // A failed transaction used its nonce; the step starts again with a new one on the next run.
+      state.failed = [...(state.failed || []), { step: name, ...entry }];
+      save();
+      throw fail('TX_FAILED');
+    }
+    state.txs[name] = entry;
     save();
     say(`${name}: block ${receipt.blockNumber}, gas ${receipt.gasUsed.toString()}`);
     if (!(await isDone())) throw fail('STEP_NOT_DONE_AFTER_TX');
   };
 
-  // One transaction per step (see the header). isDone() reads the chain and throws on a state this script did not make.
-  const step = async (name, isDone, send, beforeSend = () => {}) => {
+  // Waits until one of the step's transactions is mined (any of them: a replacement or the original).
+  const waitAny = async (name, isDone) => {
+    const deadline = Date.now() + waitTimeoutMs;
+    for (;;) {
+      const receipt = await minedReceipt(state.pending[name]);
+      if (receipt) return finish(name, receipt, isDone);
+      if (Date.now() > deadline) throw fail('TX_PENDING_TIMEOUT');
+      await sleep(3000);
+    }
+  };
+
+  // Broadcasting a transaction the node already has is harmless; errors on a re-broadcast are not fatal, because the
+  // step is then decided by its receipts and the nonce.
+  const broadcast = async (signed, rebroadcast) => {
+    try {
+      await provider.sendTransaction(signed);
+    } catch (error) {
+      if (!rebroadcast) throw error;
+    }
+  };
+
+  // One transaction per step (see the header). Each transaction is signed first, and its hash and raw form are saved
+  // before it is broadcast, so no transaction of a step can go unrecorded. isDone() reads the chain and throws on a
+  // state this script did not make.
+  const step = async (name, isDone, buildTx, beforeSend = () => {}) => {
     if (state.txs[name]) {
       if (!(await isDone())) throw fail('RECORD_AND_CHAIN_DISAGREE');
       say(`${name}: done earlier`);
       return;
     }
     let pending = state.pending[name];
-    if (pending && pending.hash && !flag('--resend')) {
-      try {
-        await finish(name, await provider.waitForTransaction(pending.hash, 1, waitTimeoutMs), isDone);
-        return;
-      } catch (error) {
-        if (error.code === 'TIMEOUT') throw fail('TX_PENDING_TIMEOUT');
-        throw error;
-      }
-    }
-    if (pending && !pending.hash) {
-      // The nonce was saved but the hash was not (the run stopped while sending): has that nonce been used?
+    if (pending) {
+      const receipt = await minedReceipt(pending);
+      if (receipt) return finish(name, receipt, isDone);
       const latest = await provider.getTransactionCount(wallet.address, 'latest');
       if (latest > pending.nonce) {
-        if (!(await isDone())) throw fail('NONCE_USED_ELSEWHERE');
-        state.txs[name] = { hash: null, nonce: pending.nonce, note: 'hash not recorded; the chain shows the step done' };
-        delete state.pending[name];
-        save();
-        say(`${name}: done (nonce ${pending.nonce}; hash not recorded)`);
-        return;
+        // The nonce is used; give the node a moment to show the receipt of one of our transactions.
+        for (let i = 0; i < 10; i++) {
+          await sleep(3000);
+          const late = await minedReceipt(pending);
+          if (late) return finish(name, late, isDone);
+        }
+        throw fail('NONCE_USED_ELSEWHERE');
+      }
+      if (!flag('--resend')) {
+        await broadcast(pending.raw[pending.raw.length - 1], true);
+        say(`${name}: waiting for ${pending.hashes[pending.hashes.length - 1]}, nonce ${pending.nonce}`);
+        return waitAny(name, isDone);
       }
     }
     if (!pending) {
-      pending = { nonce: await provider.getTransactionCount(wallet.address, 'pending') };
+      pending = { nonce: await provider.getTransactionCount(wallet.address, 'pending'), hashes: [], raw: [] };
       state.pending[name] = pending;
       beforeSend(pending);
       save();
     }
-    const tx = await send({ ...(await fees.overrides(provider)), nonce: pending.nonce });
-    pending.hash = tx.hash;
+    const request = await wallet.populateTransaction(await buildTx({ ...(await fees.overrides(provider)), nonce: pending.nonce }));
+    const signed = await wallet.signTransaction(request);
+    const hash = ethers.utils.keccak256(signed);
+    pending.hashes.push(hash);
+    pending.raw.push(signed);
+    pending.fees = { maxPriorityFeePerGas: request.maxPriorityFeePerGas.toString(), maxFeePerGas: request.maxFeePerGas.toString(),
+      gasLimit: request.gasLimit.toString() };
     save();
-    say(`${name}: sent ${tx.hash}, nonce ${pending.nonce}`);
-    try {
-      await finish(name, await provider.waitForTransaction(tx.hash, 1, waitTimeoutMs), isDone);
-    } catch (error) {
-      if (error.code === 'TIMEOUT') throw fail('TX_PENDING_TIMEOUT');
-      throw error;
-    }
+    await broadcast(signed, false);
+    say(`${name}: sent ${hash}, nonce ${pending.nonce}`);
+    return waitAny(name, isDone);
   };
 
   // 1. Deploy. The address follows from the deployer and the saved nonce, so it is known before sending.
@@ -193,7 +253,7 @@ async function main() {
   if (!state.txs.deploy && !state.pending.deploy && balance.lt(MIN_BALANCE)) throw fail('BALANCE_TOO_LOW');
   const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode, wallet);
   await step('deploy', codeMatches,
-    (overrides) => wallet.sendTransaction(factory.getDeployTransaction(overrides)),
+    (overrides) => factory.getDeployTransaction(overrides),
     (pending) => { state.address = ethers.utils.getContractAddress({ from: wallet.address, nonce: pending.nonce }); });
   const onchain = await provider.getCode(state.address);
   state.bytecode = {
@@ -247,7 +307,7 @@ async function main() {
       return true;
     };
     await step(name, isDone,
-      (overrides) => registry.createDID(doc.didId, doc.verificationMethods, doc.services, doc.dataHash, overrides));
+      (overrides) => registry.populateTransaction.createDID(doc.didId, doc.verificationMethods, doc.services, doc.dataHash, overrides));
   }
 
   // 4. Sign credentials A (to be revoked) and B (stays valid)
@@ -267,7 +327,7 @@ async function main() {
 
   // 5. Revoke A with reason code 9
   await step('revokeCredentialA', () => registry.isCredentialRevoked(issuer.didId, state.credentials.A.id),
-    (overrides) => registry.revokeCredential(issuer.didId, state.credentials.A.id, state.inputs.reasonCode, overrides));
+    (overrides) => registry.populateTransaction.revokeCredential(issuer.didId, state.credentials.A.id, state.inputs.reasonCode, overrides));
 
   state.deployerNonceAfterSetup = await provider.getTransactionCount(wallet.address, 'latest');
   state.completedAt = new Date().toISOString();

@@ -223,6 +223,37 @@ describe("DIDRegistry", function () {
         didRegistry.connect(user2).rotateKey(didId, 0, "maliciousKey")
       ).to.be.revertedWith("DIDRegistry: Not authorized");
     });
+
+    it("Should keep the authentication methods in step with the verification methods, also with duplicate keys", async function () {
+      const didId = "did:example:rotate-duplicates";
+      const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("rotate-duplicates"));
+      await didRegistry.connect(user1).createDID(didId, ["A", "B"], [], dataHash);
+
+      await didRegistry.connect(user1).rotateKey(didId, 0, "B");
+      await didRegistry.connect(user1).rotateKey(didId, 0, "C");
+
+      const didDoc = await didRegistry.getDIDDocument(didId);
+      expect(didDoc.verificationMethods).to.deep.equal(["C", "B"]);
+      expect(didDoc.authenticationMethods).to.deep.equal(["C", "B"]);
+    });
+
+    it("Should emit KeyRotated with the DID, the old key and the new key", async function () {
+      const didId = "did:example:rotate-event";
+      const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("rotate-event"));
+      await didRegistry.connect(user1).createDID(didId, ["k0", "k1"], [], dataHash);
+      const receipt = await (await didRegistry.connect(user1).rotateKey(didId, 1, "k2")).wait();
+      const event = receipt.events.find((e) => e.event === "KeyRotated");
+      expect(event.args[0].hash).to.equal(ethers.utils.keccak256(ethers.utils.toUtf8Bytes(didId)));
+      expect(event.args[1]).to.equal("k1");
+      expect(event.args[2]).to.equal("k2");
+    });
+
+    it("Should reject a key index outside the list", async function () {
+      const didId = "did:example:rotate-index";
+      const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("rotate-index"));
+      await didRegistry.connect(user1).createDID(didId, ["k0"], [], dataHash);
+      await expect(didRegistry.connect(user1).rotateKey(didId, 1, "k1")).to.be.revertedWith("DIDRegistry: Invalid key index");
+    });
   });
 
   describe("Revocation Registry", function () {

@@ -12,8 +12,9 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   `getRevocationEntry` carry `uint8 reasonCode` instead of `string reason`.
 - `pause()` no longer blocks `revokeCredential` or `deactivateDID`.
 - `rotateKey` and `updateDID` also work on a deactivated DID, which stays deactivated (repair before reactivation).
-- `rotateKey` also replaces the old key in the authentication methods, and `updateDID` sets the authentication methods
-  to the new verification methods. In version 1.0.0 the authentication methods kept the original keys.
+- `rotateKey` also replaces the key at the same position of the authentication methods, and `updateDID` sets the
+  authentication methods to the new verification methods. In version 1.0.0 the authentication methods kept the
+  original keys.
 - Administrator actions emit events: `AdminAdded`, `AdminRemoved`, `Paused`, `Unpaused`.
 - The contract description (NatSpec) states what the registry does and what a pause blocks.
 - The DID method name is now `did:smid`.
@@ -28,6 +29,11 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
 - Step V1 requires the VC 2.0 base context first and the type `VerifiableCredential`, rejects the VC 1.1 properties
   `issuanceDate` and `expirationDate` instead of ignoring them, and accepts only date-time stamps with a time zone.
 - Step V5 requires the verification method to be a `Multikey` controlled by the issuer DID and named under it.
+- V1 also requires `issuer` and `credentialSubject.id` to be strings and the dates to be real calendar dates; V4 judges
+  the validity period at the moment reported as `checkedAt`; B0 reads the block number with a plain `eth_blockNumber`
+  request (ethers' `getBlockNumber()` never goes below the highest number it has seen).
+- The issuer signs the credential as JSON will carry it, and canonicalisation refuses values JSON cannot carry
+  (undefined, non-finite numbers, lone surrogates).
 - Invalid options raise a `TypeError` (`clockToleranceMs` must be a finite number of 0 or more, `blockLag` an integer
   of 0 or more); an invalid caller block number gives `VERIFICATION_ERROR` with `INVALID_BLOCK_TAG`.
 - `validFrom` is checked, with a clock tolerance (constructor option `clockToleranceMs`, default 60 s): a credential
@@ -46,14 +52,18 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   `validFrom`.
 - The proof configuration was hashed without `@context`, so proof values differed from other `eddsa-jcs-2022`
   implementations.
-- After `rotateKey`, the rotated-out key stayed in the authentication methods.
+- After `rotateKey`, the rotated-out key stayed in the authentication methods. (The first fix matched the old key by
+  value, which rewrote duplicates of it; the key at the same position is now rotated.)
 - A correctly signed credential with an empty `id` verified as `VALID`, and one without an `id` failed at the
   revocation check with `VERIFICATION_ERROR`. Revocation is keyed by the credential `id`, so both now fail at V1 with
   `MALFORMED_CREDENTIAL`.
 - A VC 1.1 credential, or a signed object without `@context` and `type`, verified as `VALID`, so a VC 1.1
   `expirationDate` was never enforced; a string or NaN `clockToleranceMs` switched the `validFrom` check off;
   timestamps without a time zone were read in the verifier's local zone; a very long proof value took seconds to
-  decode (15.9 s for 200,000 characters).
+  decode (15.9 s for 200,000 characters); impossible dates such as 30 February were rolled over and accepted.
+- The latency analysis counted failed Sepolia rows (no time) as 0 ms and paired them, and counted pilot rows; it now
+  counts only successful measurements and reports the rest. The mode orders were unbalanced (orders 3 and 4 used 30
+  times, 1 and 2 used 20); each is now used 25 times.
 
 ### Measurements, scripts and data
 
@@ -72,7 +82,7 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   `measure-local.js`.
 - `results/did2_sepolia.jsonl` is now `results/sepolia_2026-07-21_n20.jsonl` (content unchanged);
   `results/README.md` replaces `results/sepolia_results.md` and describes every log.
-- Tests: 110 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3) and leak tests of
+- Tests: 122 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3) and leak tests of
   the Sepolia scripts.
 
 ## 1.0.0 (24 July 2026)

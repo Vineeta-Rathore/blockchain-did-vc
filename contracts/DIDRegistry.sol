@@ -46,15 +46,16 @@ contract DIDRegistry {
 
     /**
      * @notice A DID document as stored (DIDDocument without the authentication methods)
+     * @dev active is declared next to controller, so that both share one storage slot.
      */
     struct DIDRecord {
         string id;
         address controller;
+        bool active;
         string[] verificationMethods;
         string[] services;
         uint256 created;
         uint256 updated;
-        bool active;
         bytes32 dataHash;
         uint256 nonce;
     }
@@ -356,7 +357,8 @@ contract DIDRegistry {
     /**
      * @notice Propose a new controller for a DID (first step of the handover)
      * @dev Control moves only when the proposed address calls acceptController. A later proposal
-     *      replaces an earlier one. The controller keeps full control until acceptance.
+     *      replaces an earlier one (ControllerChangeCancelled is emitted for the address it named).
+     *      The controller keeps full control until acceptance. A proposal does not expire.
      * @param _didId DID to transfer
      * @param _newController Proposed controller address
      */
@@ -372,6 +374,10 @@ contract DIDRegistry {
         require(_newController != address(0), "DIDRegistry: Invalid controller");
         require(_newController != msg.sender, "DIDRegistry: Already the controller");
 
+        address previous = pendingControllers[_didId];
+        if (previous != address(0) && previous != _newController) {
+            emit ControllerChangeCancelled(_didId, msg.sender, previous, block.timestamp);
+        }
         pendingControllers[_didId] = _newController;
 
         emit ControllerChangeProposed(_didId, msg.sender, _newController, block.timestamp);
@@ -716,7 +722,7 @@ contract DIDRegistry {
 
     /**
      * @notice Pause registration and document changes
-     * @dev revokeCredential and deactivateDID stay available while paused.
+     * @dev revokeCredential, deactivateDID and cancelControllerChange stay available while paused.
      */
     function pause() external onlyAdmin {
         paused = true;

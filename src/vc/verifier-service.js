@@ -24,15 +24,41 @@ function isNonNegativeInteger(value) {
   return Number.isInteger(value) && value >= 0;
 }
 
-// Error codes only: never copy error.message, which can contain the RPC URL. A string code of capitals is kept, a
-// JSON-RPC error number becomes RPC_<n> and an HTTP status HTTP_<n>; anything else is UNKNOWN_ERROR. The Sepolia
-// scripts use this same function (scripts/lib/rpc.js), so a failure is reported alike in every mode.
+// Error codes only: never copy error.message, which can contain the RPC URL. ethers v5 wraps a JSON-RPC error or a
+// failed HTTP request in SERVER_ERROR or CALL_EXCEPTION and keeps the cause in error.error (or error.serverError),
+// so the chain is walked (four levels at most): a string code of capitals is kept, a JSON-RPC error number becomes
+// RPC_<n> and an HTTP status HTTP_<n>, joined with "/" (for example SERVER_ERROR/HTTP_429). If any message or response
+// body in the chain says that the node lacks the block, the fixed code BLOCK_UNAVAILABLE is added; only that constant
+// is written, never the text. Nothing recognisable gives UNKNOWN_ERROR. The Sepolia scripts use this same function
+// (scripts/lib/rpc.js), so a failure is reported alike in every mode.
+const BLOCK_MISSING = /header not found|unknown block|block not found|missing trie node/i;
+
 function errorCode(error) {
-  const code = error && error.code;
-  if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(code)) return code;
-  if (typeof code === 'number' && Number.isInteger(code)) return `RPC_${code}`;
-  if (error && Number.isInteger(error.status)) return `HTTP_${error.status}`;
-  return 'UNKNOWN_ERROR';
+  const parts = [];
+  let blockMissing = false;
+  const seen = new Set();
+  let level = [error];
+  for (let depth = 0; depth < 4 && level.length; depth++) {
+    const next = [];
+    for (const e of level) {
+      if (!e || typeof e !== 'object' || seen.has(e)) continue;
+      seen.add(e);
+      const { code, status } = e;
+      if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(code)) parts.push(code);
+      else if (typeof code === 'number' && Number.isInteger(code)) parts.push(`RPC_${code}`);
+      if (Number.isInteger(status)) parts.push(`HTTP_${status}`);
+      // ethers 5.8 keeps no status when HTTP 429 used up its attempts (throttleLimit): fetchJson then throws
+      // SERVER_ERROR with reason "failed response", which it does for nothing else on a POST (redirects are followed
+      // only for GET).
+      else if (code === 'SERVER_ERROR' && e.reason === 'failed response') parts.push('HTTP_429');
+      for (const text of [e.message, e.body]) if (typeof text === 'string' && BLOCK_MISSING.test(text)) blockMissing = true;
+      next.push(e.error, e.serverError);
+    }
+    level = next;
+  }
+  const unique = [...new Set(parts)];
+  if (blockMissing) unique.push('BLOCK_UNAVAILABLE');
+  return unique.length ? unique.join('/') : 'UNKNOWN_ERROR';
 }
 
 class CredentialVerifierService {

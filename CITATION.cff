@@ -7,7 +7,7 @@ abstract: >-
   issues W3C Verifiable Credentials with eddsa-jcs-2022 proofs (Ed25519,
   Multikey), a verifier that checks a credential against the registry with all
   reads pinned to one block, and the scripts and raw logs behind the
-  measurements; 143 tests.
+  measurements; 151 tests.
 type: software
 authors:
   - family-names: Rathore

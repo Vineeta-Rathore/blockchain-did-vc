@@ -34,8 +34,8 @@ const R = require('./lib/rpc');
 const { VerifiableCredentialService } = require('../src/vc/vc-service');
 const { didDocumentInputs, randomCredentialId, randomDidId } = require('./lib/fixtures');
 
-// Gas of the four setup transactions under Sepolia's schedule (deployment 21.19 M, createDID 3.12 M and 2.25 M,
-// revokeCredential 0.14 M; results/README.md), rounded up.
+// Gas of the four setup transactions under Sepolia's schedule (deployment 21.55 M, createDID 3.01 M and 2.14 M,
+// revokeCredential 0.14 M, together 26.84 M; results/README.md), rounded up.
 const GAS_BUDGET = 28000000;
 const REASON_PRIVILEGE_WITHDRAWN = 9;
 const ALLOWED_CHAINS = new Set([R.SEPOLIA.chainId, 1337, 31337]);

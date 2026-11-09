@@ -74,8 +74,11 @@ async function runBt(connection, calls, blockNumberValue) {
   const raw = calls.map((c, i) => {
     const r = byId.get(i + 1);
     if (!r || r.error || r.result === undefined) {
+      // The item's JSON-RPC error is kept as the cause, so that errorCode() gives BATCH_ITEM_ERROR/RPC_<n> (and
+      // BLOCK_UNAVAILABLE), as in the other modes.
       const error = new Error('BATCH_ITEM_ERROR');
-      error.code = r && r.error && Number.isInteger(r.error.code) ? r.error.code : 'BATCH_ITEM_ERROR';
+      error.code = 'BATCH_ITEM_ERROR';
+      if (r && r.error) error.error = { code: r.error.code, message: r.error.message };
       throw error;
     }
     return r.result;

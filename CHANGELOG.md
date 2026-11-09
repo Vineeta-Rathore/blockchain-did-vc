@@ -15,14 +15,19 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
 - A handover takes two steps: `changeController` records a proposal (`ControllerChangeProposed`), and control moves
   when the proposed address calls the new `acceptController` (`ControllerChanged`). New: `cancelControllerChange`
   (also while paused; `ControllerChangeCancelled`) and `getPendingController`. Deactivation withdraws a pending
-  proposal. In version 1.0.0, `changeController` moved control at once, without the new address's consent.
+  proposal; a proposal that replaces another emits `ControllerChangeCancelled` for the address it replaces. In
+  version 1.0.0, `changeController` moved control at once, without the new address's consent.
 - The authentication methods are no longer stored: `getDIDDocument` returns the verification methods in that field,
   so `rotateKey` and `updateDID` change both. In version 1.0.0 the stored authentication methods kept the original
   keys.
 - A revocation entry is stored in one slot (time, reason code, flag); `getRevocationEntry` returns the credential ID
-  it was asked about, and an empty entry for a credential that is not revoked. The return types are unchanged.
-  Gas with realistic documents: `revokeCredential` 56,765 instead of 145,713 (osaka), `createDID` 662,928 and 489,098
-  instead of 863,141 and 689,311.
+  it was asked about, and an empty entry for a credential that is not revoked. The return types are unchanged. The
+  `active` flag shares a storage slot with the controller.
+- Gas (osaka). With version 1.0.0's placeholder inputs, `createDID` uses 279,772 gas (346,878 in version 1.0.0) and
+  `revokeCredential` 56,016 (171,188 with a 30-character text reason). With realistic documents (one Ed25519 Multikey
+  verification method): `createDID` 640,821 for a controller's first DID and 466,991 for its second,
+  `revokeCredential` 56,765. The deployment uses 3,049,411 gas for 13,660 bytes of code (version 1.0.0: 2,802,701 on
+  Sepolia); the handover functions make the code larger.
 - Administrator actions emit events: `AdminAdded`, `AdminRemoved`, `Paused`, `Unpaused`.
 - The contract description (NatSpec) states what the registry does and what a pause blocks.
 - The DID method name is now `did:smid`.
@@ -76,7 +81,10 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   new one per row; the analysis reports such rows by mode and order.
 - After an HTTP 429, `measure-sepolia.js` waited for ethers' 30 s request timer before exiting; argument errors were
   reported as `UNKNOWN_ERROR` (now `ARG_LOG_MISSING`, `ARG_BLOCK_LAG`, `ARG_TIMEOUT`). The verifier and the Sepolia
-  scripts reported the same JSON-RPC error with different codes; both now give `RPC_<n>` (and `HTTP_<n>`).
+  scripts reported the same JSON-RPC error with different codes, and in most modes every failure was logged as
+  `SERVER_ERROR` or `CALL_EXCEPTION`. Both now walk the causes that ethers keeps and log codes such as
+  `SERVER_ERROR/HTTP_429` or `CALL_EXCEPTION/SERVER_ERROR/RPC_-32000/BLOCK_UNAVAILABLE` (the last when the node
+  reports a missing block); only codes are written, never messages.
 - `deploy-sepolia.js` checked for a fixed 0.02 SepoliaETH, less than the setup can cost at the highest base fee it
   accepts; it now requires 28 million gas at the highest fee it may pay (default maximum base fee 0.5 gwei).
 
@@ -97,11 +105,12 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   `measure-local.js`.
 - `results/did2_sepolia.jsonl` is now `results/sepolia_2026-07-21_n20.jsonl` (content unchanged);
   `results/README.md` replaces `results/sepolia_results.md` and describes every log.
-- `analyze-latency.js` also reports intervals over processes or blocks (whole clusters resampled), the medians of
+- `analyze-latency.js` also reports the median of each process or block with an order-statistic interval over those
+  medians, the medians of
   the first and second halves of each, and headers that disagree; `measure-local.js` runs 100 warm-up verifications
   per process (10 before) and records whether the checkout differs from its commit; `measure-sepolia.js` takes
   `--timeout-ms` and records the commit. `requirements.txt` lists the Python packages.
-- Tests: 143 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3), leak tests of
+- Tests: 151 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3), leak tests of
   the Sepolia scripts, and a check that the gas tables in the READMEs match the measurement.
 
 ## 1.0.0 (24 July 2026)

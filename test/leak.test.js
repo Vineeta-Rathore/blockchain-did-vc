@@ -202,7 +202,7 @@ describe('leak tests: RPC failures never reveal the URL and are never retried', 
           expect(clean(r.stdout + r.stderr + logText), 'stdout, stderr and log').to.equal(true);
           if (behaviour === '500') {
             expect(r.code).to.equal(1);
-            expect(r.stderr).to.match(/^measure-sepolia failed: [A-Z0-9_]+\s*$/);
+            expect(r.stderr).to.match(/^measure-sepolia failed: [A-Z0-9_/-]+\s*$/);
           } else {
             expect(r.code).to.equal(0);
             expect(logText).to.include('"kind":"sepolia"');
@@ -224,7 +224,7 @@ describe('leak tests: RPC failures never reveal the URL and are never retried', 
           expect(clean(text), 'stdout, stderr and files').to.equal(true);
           expect(noKey(text), 'deployer key').to.equal(true);
           expect(r.code).to.equal(1);
-          expect(r.stderr).to.match(/^deploy-sepolia failed: [A-Z0-9_]+\s*$/);
+          expect(r.stderr).to.match(/^deploy-sepolia failed: [A-Z0-9_/-]+\s*$/);
           if (behaviour === 'call-429') expect(r.stderr).to.include('BALANCE_TOO_LOW');
         } finally {
           server.close();

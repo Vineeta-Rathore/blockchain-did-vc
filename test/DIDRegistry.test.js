@@ -270,6 +270,52 @@ describe("DIDRegistry", function () {
       expect(await didRegistry.getController(didId)).to.equal(verifier.address);
     });
 
+    it("emits a cancellation for the address an earlier proposal named when a later proposal replaces it", async function () {
+      await didRegistry.connect(user1).changeController(didId, user2.address);
+      const receipt = await (await didRegistry.connect(user1).changeController(didId, verifier.address)).wait();
+      const cancelled = eventOf(receipt, "ControllerChangeCancelled");
+      expect(cancelled.args[1]).to.equal(user1.address);
+      expect(cancelled.args[2]).to.equal(user2.address);
+      expect(eventOf(receipt, "ControllerChangeProposed").args[2]).to.equal(verifier.address);
+      const again = await (await didRegistry.connect(user1).changeController(didId, verifier.address)).wait();
+      expect(eventOf(again, "ControllerChangeCancelled"), "same address proposed again").to.equal(undefined);
+    });
+
+    it("keeps a pending proposal through updateDID and rotateKey", async function () {
+      await didRegistry.connect(user1).changeController(didId, user2.address);
+      await didRegistry.connect(user1).updateDID(didId, ["key2"], [], dataHash);
+      await didRegistry.connect(user1).rotateKey(didId, 0, "key3");
+      expect(await didRegistry.getPendingController(didId)).to.equal(user2.address);
+      await didRegistry.connect(user2).acceptController(didId);
+      expect(await didRegistry.getController(didId)).to.equal(user2.address);
+    });
+
+    it("names the controller in the cancellation that deactivation emits", async function () {
+      await didRegistry.connect(user1).changeController(didId, user2.address);
+      const receipt = await (await didRegistry.connect(user1).deactivateDID(didId)).wait();
+      const e = eventOf(receipt, "ControllerChangeCancelled");
+      expect(e.args[0].hash).to.equal(topic);
+      expect(e.args[1]).to.equal(user1.address);
+    });
+
+    it("keeps every DID exactly once in its controller's list over chains of handovers, also back to an earlier controller", async function () {
+      const other = "did:example:handover-2";
+      await didRegistry.connect(user1).createDID(other, ["k"], [], dataHash);
+      const move = async (did, from, to) => {
+        await didRegistry.connect(from).changeController(did, to.address);
+        await didRegistry.connect(to).acceptController(did);
+      };
+      await move(didId, user1, user2);
+      await move(didId, user2, verifier);
+      await move(didId, verifier, user1);
+      await move(other, user1, user2);
+      await move(other, user2, user1);
+      await move(didId, user1, user2);
+      expect(await didRegistry.getDIDsByController(user1.address)).to.deep.equal([other]);
+      expect(await didRegistry.getDIDsByController(user2.address)).to.deep.equal([didId]);
+      expect(await didRegistry.getDIDsByController(verifier.address)).to.deep.equal([]);
+    });
+
     it("lets only the controller cancel a proposal, and emits the cancellation", async function () {
       await expect(didRegistry.connect(user1).cancelControllerChange(didId)).to.be.revertedWith(
         "DIDRegistry: No pending controller"

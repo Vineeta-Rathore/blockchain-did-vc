@@ -54,7 +54,7 @@ does not reproduce its bytecode; its interface is the version 1.0.0 ABI ([`resul
 ```bash
 npm ci                 # install the locked toolchain (Hardhat 2.29.0, ethers 5.8.0)
 npx hardhat compile    # solc 0.8.19, optimiser on, 200 runs
-npm test               # 143 tests
+npm test               # 151 tests
 npm run measure-gas    # gas of each operation, on the osaka schedule and on Sepolia's
 ```
 
@@ -62,8 +62,8 @@ Run every command from the repository root. `npm ci` installs exactly the versio
 `npm install` may resolve newer ones. Outside the repository, `npx hardhat` offers to download another Hardhat
 version instead of using this one.
 
-`npm test` runs seven suites: the registry (58 tests), credentials and verification (50), leak tests (14), the RPC
-helpers' secret handling (6), the measurement harness (8), the latency analysis (4) and the gas model (3). The leak tests run every measurement mode, and both Sepolia
+`npm test` runs seven suites: the registry (62 tests), credentials and verification (50), leak tests (14), the RPC
+helpers' secret handling (6), the measurement harness (12), the latency analysis (4) and the gas model (3). The leak tests run every measurement mode, and both Sepolia
 scripts as child processes, against a local fake server that fails requests in eight ways, and check the raw rows,
 output, logs and records for the fake token, the URL path and the fake deployer key, and that no request is retried.
 
@@ -198,17 +198,21 @@ verification method (the issuer's also one service entry):
 
 | Operation | osaka (Hardhat) | Glamsterdam (Sepolia) | New storage slots |
 |---|---|---|---|
-| Deployment (13,430 bytes of code) | 2,999,747 | 21,194,807 | 2 |
-| `createDID`, a controller's first DID | 662,928 | 3,119,488 | 28 |
-| `createDID`, a controller's second DID | 489,098 | 2,249,198 | 20 |
+| Deployment (13,660 bytes of code) | 3,049,411 | 21,550,413 | 2 |
+| `createDID`, a controller's first DID | 640,821 | 3,009,361 | 27 |
+| `createDID`, a controller's second DID | 466,991 | 2,139,071 | 19 |
 | `revokeCredential` (45-character credential ID, reason code 9) | 56,765 | 138,785 | 1 |
 
 The Glamsterdam column is computed by `scripts/lib/gas-schedule.js` from the storage writes of each local
 transaction. It matched the gas that Sepolia reported for the same calls (`eth_simulateV1`, 9 November 2026)
-exactly; `test/GasSchedule.test.js` checks this, and that the tables in this file and in `results/README.md` carry the
-measured values. Most of the gas is spent on new storage slots, so the registry stores nothing twice; the delegation
-and attribute functions, which grant no permission (see Limits), still add to the code and so to the deployment gas. The three EIPs were in Last Call at that date and may still change
-before they reach mainnet. The gas of the actual Sepolia deployment is in `results/sepolia_v1.1_deployment.json`
+exactly; `test/GasSchedule.test.js` checks this, and that the figures in this file, in `results/README.md` and in
+`CHANGELOG.md` are the measured ones. Most of the gas is spent on new storage slots. The registry stores nothing twice
+and keeps the `active` flag in the controller's slot, but it is not otherwise packed: the two timestamps and the nonce
+take a full slot each, and the delegation and attribute functions, which grant no permission (see Limits), add to the
+code and so to the deployment gas. The deployment needs more gas than the 16,777,216 that EIP-7825 allows a
+transaction; Sepolia accepts it because EIP-8037 meters the state gas outside that cap (checked with `eth_simulateV1`
+with validation, and with transactions of 20 to 30 million gas mined on Sepolia on 9 November 2026). The three EIPs
+were in Last Call at that date and may still change before they reach mainnet. The gas of the actual Sepolia deployment is in `results/sepolia_v1.1_deployment.json`
 (to be added).
 
 ## Reproducing the numbers
@@ -234,14 +238,14 @@ process index (which `analyze-latency.js` reports).
 and the expected answers) and leaves out pilot rows; it reports the rows it left out, by mode and error code, rows
 with unexpected request counts, and rows whose timer included a new connection, by mode and order. Measurements of
 one process (local) or one block (Sepolia) are not independent, so it also gives the median of each process or block,
-an interval for the median that resamples whole processes or blocks, the same for the paired speed-ups, and the
-medians of the first and second halves of each process or block (a check that the warm-up was long enough). With
-five processes or ten blocks there are few clusters to resample, so that interval is approximate and can be too
-narrow; the median of every process or block is printed with it, and their spread is the more direct evidence. It warns
+the median of those medians with a distribution-free interval from their order statistics and its exact coverage (the
+range of five process medians, 93.75%; the 2nd to the 9th of ten block medians, 97.9%), the same for the paired
+speed-ups, and the medians of the first and second halves of each process or block (a check that the warm-up was long
+enough). The pooled interval treats every row as independent and is printed as such. It warns
 when the headers of one log disagree (commit, machine, versions), when a process index repeats, and when a header
 records a checkout that differs from its commit. `scripts/lib/stats.js` defines every statistic once: the conventional median, quartiles by the Hyndman and Fan type 7
-rule, the nearest-rank 95th percentile, an order-statistic confidence interval for the median, and a seeded percentile
-bootstrap for paired speed-ups, and a bootstrap that resamples whole processes or blocks. Each log, and what produced it, is described in
+rule, the nearest-rank 95th percentile, an order-statistic confidence interval for the median (of the rows, or of the
+process or block medians), and a seeded percentile bootstrap for paired speed-ups. Each log, and what produced it, is described in
 [`results/README.md`](results/README.md).
 
 ## Sepolia scripts and secrets
@@ -251,7 +255,8 @@ The two Sepolia scripts run with plain Node, not through Hardhat, and no Hardhat
 - `measure-sepolia.js` is read-only: no signer, no transaction. It times the full verification (mode P) and the four
   contract reads sent in sequence (S), concurrently (C) and as one JSON-RPC batch (Bt), in a rotating order, at ten
   fixed times of day (machine local time). The order of the four modes depends only on the block and the iteration,
-  so the 100 timed iterations use each order 25 times, and a block run on its own (a reserve slot) keeps its orders.
+  so, when all ten blocks run (a missed block replaced in a reserve slot), the 100 timed iterations use each order 25
+  times; a block run on its own keeps its orders. `--only-block` takes 1 to 10 and `--at` a time HH:MM.
   A block that cannot start within two minutes of its time, also after the machine slept, is logged as missed.
   `--pilot` runs three labelled iterations. Sockets stay open between requests for up to 10 minutes and are reused in
   turn (Node's default agent closes them after 5 s and always reuses the most recent one, so the extra connections
@@ -304,9 +309,16 @@ How secrets are handled:
   and reactivation, so during a pause the only remedy for a leaked key is to deactivate the DID. The owner can never be
   removed or replaced, so a compromised owner key can keep these functions paused.
 - Delegates are recorded but grant no permission in this contract.
-- Anyone can add DIDs to another address's list by transferring them to it, which makes later transfers by that
-  address more expensive. `rotateKey` replaces one entry of the verification methods, so a key listed twice stays
-  usable through the other entry.
+- An address's list of DIDs grows only through its own actions (creating a DID or accepting one). The address that
+  accepts a handover pays for a search through the previous controller's list, which grows with that list.
+- A handover proposal does not expire. It survives `updateDID`, `rotateKey`, revocations and a pause, and ends only
+  when it is accepted, replaced, cancelled or the DID is deactivated; a proposal forgotten long ago can still be
+  accepted, also by whoever has since obtained the proposed address's key. A two-step handover does not protect
+  against a stolen controller key, whose holder can propose and accept an address of their own. After a handover the
+  DID keeps its delegates and attributes, and the new controller can revoke every credential issued under the DID,
+  including those issued before the handover.
+- `rotateKey` replaces one entry of the verification methods, so a key listed twice stays usable through the other
+  entry.
 - The contract has not been audited by a third party.
 
 ## Standards

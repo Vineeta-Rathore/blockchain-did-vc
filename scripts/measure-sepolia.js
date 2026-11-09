@@ -68,6 +68,10 @@ async function main() {
   if (!Number.isInteger(blockLag) || blockLag < 0) throw argError('ARG_BLOCK_LAG');
   const timeoutMs = Number(arg('--timeout-ms', '30000'));
   if (!Number.isInteger(timeoutMs) || timeoutMs < 100) throw argError('ARG_TIMEOUT');
+  const onlyBlock = arg('--only-block');
+  if (onlyBlock !== null && !/^([1-9]|10)$/.test(onlyBlock)) throw argError('ARG_ONLY_BLOCK');
+  const at = arg('--at');
+  if (at !== null && (onlyBlock === null || !/^([01]\d|2[0-3]):[0-5]\d$/.test(at))) throw argError('ARG_AT');
   const deployment = JSON.parse(fs.readFileSync(arg('--deployment', 'results/sepolia_v1.1_deployment.json'), 'utf8'));
   const pilot = flag('--pilot');
   const say = R.makeWriter(redact, (t) => process.stdout.write(`${t}\n`));
@@ -178,6 +182,8 @@ async function main() {
 main().then(
   () => process.stdout.write('', () => process.exit(process.exitCode || 0)),
   (error) => {
-    process.stderr.write(`measure-sepolia failed: ${R.errorCode(error)}\n`, () => process.exit(1));
+    // Both streams are flushed before exiting (pipes can be asynchronous); the log is written synchronously.
+    process.stderr.write(`measure-sepolia failed: ${R.errorCode(error)}\n`,
+      () => process.stdout.write('', () => process.exit(1)));
   },
 );

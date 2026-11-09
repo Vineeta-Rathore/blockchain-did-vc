@@ -107,6 +107,68 @@ describe('harness: connections, mode order, intervals and arguments', function (
     });
   });
 
+  describe('error codes', function () {
+    // Answers the block number; fails every contract read (single or batched) in one of three ways.
+    function failingServer(behaviour) {
+      const server = http.createServer((req, res) => {
+        let body = '';
+        req.on('data', (c) => { body += c; });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          if (!Array.isArray(parsed) && parsed.method === 'eth_blockNumber') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ jsonrpc: '2.0', id: parsed.id, result: '0x10' }));
+          } else if (behaviour === 'block') {
+            const err = (id) => ({ jsonrpc: '2.0', id, error: { code: -32000, message: 'header not found' } });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(Array.isArray(parsed) ? parsed.map((r) => err(r.id)) : err(parsed.id)));
+          } else {
+            res.writeHead(Number(behaviour), { 'Content-Type': 'text/plain' });
+            res.end('failure');
+          }
+        });
+      });
+      return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({
+        server, url: `http://127.0.0.1:${server.address().port}/`,
+      })));
+    }
+
+    for (const [behaviour, must, mustNot] of [['block', 'BLOCK_UNAVAILABLE', 'HTTP_'], ['429', 'HTTP_429', 'BLOCK_UNAVAILABLE'],
+      ['500', 'HTTP_500', 'BLOCK_UNAVAILABLE']]) {
+      it(`names a ${behaviour} failure in every mode, with codes only`, async function () {
+        const { server, url } = await failingServer(behaviour);
+        try {
+          const { CredentialVerifierService } = require('../src/vc/verifier-service');
+          const provider = R.makeProvider(url, { network: { name: 'local', chainId: 1337 }, timeoutMs: 2000 });
+          const iface = new ethers.utils.Interface(ABI);
+          const contract = new ethers.Contract(ADDRESS, ABI, provider);
+          const ctx = { provider, counter: R.requestCounter(provider), credential: { '@context': ['https://www.w3.org/ns/credentials/v2', 'https://w3id.org/security/data-integrity/v2'],
+              type: ['VerifiableCredential'], ...CREDENTIAL, proof: { verificationMethod: `${CREDENTIAL.issuer}#key-1` } }, iface,
+            address: ADDRESS, blockLag: 0, calls: M.readCalls(iface, ADDRESS, CREDENTIAL),
+            verifier: new CredentialVerifierService(contract, { provider }) };
+          for (const mode of ['P', 'S', 'C', 'Bt']) {
+            const row = await M.runMode(mode, ctx);
+            const code = row.error;
+            expect(code, `${mode}: ${code}`).to.include(must);
+            expect(code, `${mode}: ${code}`).to.not.include(mustNot);
+            expect(code, mode).to.match(/^[A-Z0-9_/-]+$/);
+          }
+        } finally {
+          server.close();
+        }
+      });
+    }
+
+    it('turns nested JSON-RPC numbers and HTTP statuses into RPC_<n> and HTTP_<n>', function () {
+      expect(R.errorCode({ code: -32000 })).to.equal('RPC_-32000');
+      expect(R.errorCode({ status: 429 })).to.equal('HTTP_429');
+      expect(R.errorCode({ code: 'SERVER_ERROR', error: { code: -32000, message: 'header not found' } }))
+        .to.equal('SERVER_ERROR/RPC_-32000/BLOCK_UNAVAILABLE');
+      expect(R.errorCode({ code: 'SERVER_ERROR', status: 429, body: 'see https://x.example/v3/TOKEN' })).to.equal('SERVER_ERROR/HTTP_429');
+      expect(R.errorCode(new Error('x'))).to.equal('UNKNOWN_ERROR');
+    });
+  });
+
   describe('mode order', function () {
     it('uses each order 25 times over ten blocks, and gives a block run alone the same orders as in the full run', function () {
       const counts = {};
@@ -124,11 +186,14 @@ describe('harness: connections, mode order, intervals and arguments', function (
   });
 
   describe('intervals over clusters', function () {
-    it('resamples whole clusters', function () {
-      const ci = S.clusterBootstrapCI([[1, 1, 1], [10, 10, 10]], S.median, { seed: 1 });
-      expect(ci.lower).to.equal(1);
-      expect(ci.upper).to.equal(10);
-      expect(S.clusterBootstrapCI([[1, 1, 1], [10, 10, 10]], S.median, { seed: 1 })).to.deep.equal(ci);
+    it('gives an order-statistic interval of the cluster medians with its exact coverage', function () {
+      const five = S.clusterMedianCI([5, 1, 4, 2, 3]);
+      expect([five.lower, five.upper, five.ranks]).to.deep.equal([1, 5, [1, 5]]);
+      expect(five.coverage).to.equal(0.9375);
+      const ten = S.clusterMedianCI([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
+      expect([ten.lower, ten.upper, ten.ranks]).to.deep.equal([2, 9, [2, 9]]);
+      expect(ten.coverage).to.be.closeTo(1 - 2 * 11 / 1024, 1e-12);
+      expect(() => S.clusterMedianCI([])).to.throw();
     });
 
     it('reports per-process medians, an interval over processes, drift between halves and header mismatches', function () {
@@ -145,8 +210,8 @@ describe('harness: connections, mode order, intervals and arguments', function (
       const { out } = analyzeLocal(rows);
       expect(out.clusters.k).to.equal(2);
       expect(out.clusters.medians).to.deep.equal({ 1: 3.5, 2: 5.5 });
-      expect(out.clusters.bootstrap.lower).to.be.at.most(3.5);
-      expect(out.clusters.bootstrap.upper).to.be.at.least(5.5);
+      expect([out.clusters.interval.lower, out.clusters.interval.upper]).to.deep.equal([3.5, 5.5]);
+      expect(out.clusters.medianOfMedians).to.equal(4.5);
       expect(out.drift.firstHalfMedian).to.be.above(out.drift.secondHalfMedian);
       expect(out.drift.clustersSlowerFirst).to.equal(2);
       expect(out.warnings.join(' ')).to.match(/commit/);
@@ -171,8 +236,9 @@ describe('harness: connections, mode order, intervals and arguments', function (
       expect(out.speedup_S_over_C.n).to.equal(30);
       expect(out.newSockets).to.deep.equal({ C: { 'P,S,C,Bt': 3 } });
       expect(out.clusters.S.k).to.equal(3);
-      expect(out.clusters.S.bootstrap.lower).to.be.a('number');
-      expect(out.speedup_S_over_C.blockBootstrap.lower).to.be.a('number');
+      expect(out.clusters.S.interval.ranks).to.deep.equal([1, 3]);
+      expect(out.speedup_S_over_C.blockInterval.clusters).to.equal(3);
+      expect(Object.keys(out.perBlockMedian)).to.have.length(3);
     });
   });
 
@@ -186,6 +252,12 @@ describe('harness: connections, mode order, intervals and arguments', function (
       expect(r.stderr).to.match(/ARG_BLOCK_LAG/);
       r = await runScript('measure-sepolia.js', ['--deployment', deployment, '--log', 'x.jsonl', '--timeout-ms', '-1'], env);
       expect(r.stderr).to.match(/ARG_TIMEOUT/);
+      for (const k of ['0', '11', 'x', '2.5']) {
+        r = await runScript('measure-sepolia.js', ['--deployment', deployment, '--log', 'x.jsonl', '--only-block', k], env);
+        expect(r.stderr, k).to.match(/ARG_ONLY_BLOCK/);
+      }
+      r = await runScript('measure-sepolia.js', ['--deployment', deployment, '--log', 'x.jsonl', '--only-block', '3', '--at', '25:00'], env);
+      expect(r.stderr).to.match(/ARG_AT/);
     });
   });
 });

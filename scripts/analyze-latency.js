@@ -11,8 +11,9 @@
  * Warm-up rows are excluded. Reads only the log; never contacts a network.
  *
  * Samples of one process (local) or one block (Sepolia) are not independent of each other, so besides the pooled
- * statistics every summary gives the median of each process or block and an interval over them (whole processes or
- * blocks resampled; stats.clusterBootstrapCI), and compares the first and second half of the timed iterations within
+ * statistics every summary gives the median of each process or block and an order-statistic interval for the median
+ * of those medians (stats.clusterMedianCI, with its exact coverage), and compares the first and second half of the
+ * timed iterations within
  * each process or block (drift). Headers that disagree (commit, machine, versions) are reported as warnings.
  */
 const fs = require('fs');
@@ -33,15 +34,13 @@ function groupBy(rows, key) {
   return out;
 }
 
-// The median of each cluster and an interval over clusters (whole clusters resampled).
+// The median of each cluster, the median of those medians and an order-statistic interval for it.
 function clusterSummary(rows, clusterKey) {
-  const groups = groupBy(rows, clusterKey);
-  return {
-    k: groups.size,
-    medians: Object.fromEntries([...groups].map(([g, rs]) => [g, S.median(rs.map((r) => r.total_ms))])),
-    bootstrap: S.clusterBootstrapCI([...groups.values()].map((rs) => rs.map((r) => r.total_ms)), S.median),
-  };
+  const medians = Object.fromEntries([...groupBy(rows, clusterKey)].map(([g, rs]) => [g, S.median(rs.map((r) => r.total_ms))]));
+  const values = Object.values(medians);
+  return { k: values.length, medians, medianOfMedians: S.median(values), interval: S.clusterMedianCI(values) };
 }
+const ci = (i) => `[${i.lower.toFixed(2)}, ${i.upper.toFixed(2)}] (${(100 * i.coverage).toFixed(1)}%, ranks ${i.ranks.join(' and ')} of ${i.clusters})`;
 
 // First half against second half of the timed iterations of each cluster (equal halves; the middle iteration of an
 // odd count is left out). A warm-up that is too short shows as first halves that are slower in most clusters.
@@ -152,7 +151,7 @@ function analyzeLocal(rows) {
       `[${r2(t.medianCI.lower)}, ${r2(t.medianCI.upper)}] (rows taken as independent), Q1 ${r2(t.q1)}, Q3 ${r2(t.q3)}, ` +
       `p95 ${r2(t.p95)}, mean ${r2(t.mean)}, min ${r2(t.min)}, max ${r2(t.max)} ms`,
     `Over ${c.k} processes: per-process medians ${Object.entries(c.medians).map(([k, v]) => `${k}: ${r2(v)}`).join(', ')} ms; ` +
-      `interval for the median, processes resampled: [${r2(c.bootstrap.lower)}, ${r2(c.bootstrap.upper)}] ms (seed ${c.bootstrap.seed})`,
+      `median of the process medians ${r2(c.medianOfMedians)} ms, interval ${ci(c.interval)} ms`,
     ...(d ? [`Drift: first-half median ${r2(d.firstHalfMedian)} ms, second-half ${r2(d.secondHalfMedian)} ms; ` +
       `first half slower in ${d.clustersSlowerFirst} of ${d.clusters} processes`] : []),
     `Per-step medians (ms): ${Object.entries(steps).map(([k, v]) => `${k} ${v.median.toFixed(3)}`).join(', ')}`,
@@ -214,7 +213,7 @@ function analyzeSepolia(rows) {
     const mb = new Map((byMode.get(b) || []).map((r) => [key(r), r]));
     const left = [];
     const right = [];
-    const ratios = new Map();
+    const ratios = new Map(); // per block
     for (const r of byMode.get(a) || []) {
       const other = mb.get(key(r));
       if (!other) continue;
@@ -224,10 +223,11 @@ function analyzeSepolia(rows) {
       ratios.get(byBlock(r)).push(r.total_ms / other.total_ms);
     }
     if (!left.length) return null;
-    return { ...S.pairedRatio(left, right), blockBootstrap: S.clusterBootstrapCI([...ratios.values()], S.median) };
+    const blockMedians = [...ratios.values()].map((x) => S.median(x));
+    return { ...S.pairedRatio(left, right), blockMedianOfRatios: S.median(blockMedians), blockInterval: S.clusterMedianCI(blockMedians) };
   };
   const perBlock = {};
-  for (const [blk, rs] of groupBy(timed, (r) => `${r.block}${r.reserve ? ' (reserve)' : ''}`)) {
+  for (const [blk, rs] of groupBy(timed, byBlock)) {
     perBlock[blk] = Object.fromEntries([...groupBy(rs, (r) => r.mode)].map(([m, x]) => [m, S.median(x.map((r) => r.total_ms))]));
   }
   // Rows whose timer included a new connection (DNS, TCP, TLS), by mode and order; they stay in the statistics.
@@ -282,7 +282,7 @@ function analyzeSepolia(rows) {
     const c = clusters[m];
     const d = driftByMode[m];
     lines.push(`${m}: n = ${v.n}, median ${r1(v.median)} ms [${r1(v.medianCI.lower)}, ${r1(v.medianCI.upper)}] (rows taken as ` +
-      `independent), over ${c.k} blocks [${r1(c.bootstrap.lower)}, ${r1(c.bootstrap.upper)}] (blocks resampled), ` +
+      `independent), median of the ${c.k} block medians ${r1(c.medianOfMedians)} ms ${ci(c.interval)}, ` +
       `Q1 ${r1(v.q1)}, Q3 ${r1(v.q3)}, p95 ${r1(v.p95)}, max ${r1(v.max)}` +
       (d ? `; first/second half ${r1(d.firstHalfMedian)}/${r1(d.secondHalfMedian)} ms, first slower in ${d.clustersSlowerFirst} of ${d.clusters} blocks` : ''));
   }
@@ -291,7 +291,7 @@ function analyzeSepolia(rows) {
   for (const [name, v] of [['S/C', out.speedup_S_over_C], ['S/Bt', out.speedup_S_over_Bt]]) {
     if (v) {
       lines.push(`${name} paired speed-up (n = ${v.n}): median ${r2(v.medianOfRatios)} [${r2(v.bootstrap.lower)}, ${r2(v.bootstrap.upper)}] ` +
-        `(pairs resampled), [${r2(v.blockBootstrap.lower)}, ${r2(v.blockBootstrap.upper)}] (blocks resampled; seed ${v.bootstrap.seed}), ` +
+        `(pairs resampled, seed ${v.bootstrap.seed}), median of the block medians ${r2(v.blockMedianOfRatios)} ${ci(v.blockInterval)}, ` +
         `range ${r2(v.min)}-${r2(v.max)}, ratio of medians ${r2(v.ratioOfMedians)}`);
     }
   }

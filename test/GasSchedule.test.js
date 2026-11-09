@@ -6,34 +6,33 @@ const { seededGasInputs } = require('../scripts/lib/fixtures');
 const { GLAMSTERDAM, OSAKA, glamsterdamGas, storageWrites } = require('../scripts/lib/gas-schedule');
 
 // Gas of the seeded inputs of scripts/measure-gas.js (case 1): on the Hardhat network (osaka), and on Sepolia as
-// reported by eth_simulateV1 on 9 Nov 2026 (base block 12095213, sender 0x1Af22bC52FB82C57Fb210536462D6b857A3C073f,
+// reported by eth_simulateV1 on 9 Nov 2026 (base block 12098092, sender 0x1Af22bC52FB82C57Fb210536462D6b857A3C073f,
 // registry code placed by a state override for the three calls). The model in scripts/lib/gas-schedule.js must give
 // the Sepolia values from the local storage writes.
-const OSAKA_GAS = { deploy: 2999747, createIssuer: 662928, createSubject: 489098, revoke: 56765 };
-const SEPOLIA_2026_11_09 = { deploy: 21194807, createIssuer: 3119488, createSubject: 2249198, revoke: 138785 };
-const NEW_SLOTS = { deploy: 2, createIssuer: 28, createSubject: 20, revoke: 1 };
+const OSAKA_GAS = { deploy: 3049411, createIssuer: 640821, createSubject: 466991, revoke: 56765 };
+const SEPOLIA_2026_11_09 = { deploy: 21550413, createIssuer: 3009361, createSubject: 2139071, revoke: 138785 };
+const SEPOLIA_BASE_BLOCK = 12098092;
+const NEW_SLOTS = { deploy: 2, createIssuer: 27, createSubject: 19, revoke: 1 };
 
 const measured = {};
 
-// The figures in the README tables are typed by hand; this checks them against the measurement above.
+// The figures in the READMEs and the CHANGELOG are typed by hand; the last test checks them against the measurement.
 const ROWS = {
   deploy: 'Deployment',
   createIssuer: "`createDID`, a controller's first DID",
   createSubject: "`createDID`, a controller's second DID",
   revoke: '`revokeCredential`',
 };
-const firstNumber = (cell) => {
-  const m = cell.match(/\d{1,3}(?:,\d{3})+|\d+/);
-  return m ? Number(m[0].replace(/,/g, '')) : null;
-};
-function readDoc(file) {
-  return fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-}
+const fmt = (n) => n.toLocaleString('en-GB');
+const readDoc = (file) => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 function row(text, file, label) {
   const lines = text.split(/\r?\n/).filter((l) => l.startsWith(`| ${label}`));
   expect(lines, `${file}: one row "${label}"`).to.have.length(1);
   return lines[0].split('|').slice(1, -1).map((c) => c.trim());
 }
+const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// A cell that holds exactly the number, optionally followed by a note in brackets.
+const numberCell = (n) => new RegExp(`^${escape(fmt(n))}( \\([^)]*\\))?$`);
 
 describe('Gas schedule (osaka on Hardhat, Glamsterdam on Sepolia)', function () {
   it('reproduces the Sepolia gas of all four operations from the local storage writes', async function () {
@@ -58,6 +57,14 @@ describe('Gas schedule (osaka on Hardhat, Glamsterdam on Sepolia)', function () 
       expect(sepolia, `${name} Sepolia`).to.equal(SEPOLIA_2026_11_09[name]);
       measured[name] = { osaka: receipt.gasUsed.toNumber(), sepolia, slots: writes.setCold + writes.setWarm };
     }
+
+    // Case 2 of measure-gas.js: the version 1.0.0 placeholder inputs.
+    const reg2 = await Factory.deploy();
+    const dh = (s) => ethers.utils.keccak256(ethers.utils.toUtf8Bytes(s));
+    const gas = async (p) => (await (await p).wait()).gasUsed.toNumber();
+    measured.placeholderCreate = await gas(reg2.createDID('did:example:gas-test', ['key1'], ['service1'], dh('gas-test')));
+    await gas(reg2.createDID('did:smid:issuer0000', ['key1'], ['service1'], dh('issuer')));
+    measured.placeholderRevoke = await gas(reg2.revokeCredential('did:smid:issuer0000', 'urn:uuid:12345678-1234-1234-1234-123456789abc', 9));
   });
 
   it('prices one new storage slot at 64 bytes of state and returns null for writes it does not model', function () {
@@ -67,22 +74,35 @@ describe('Gas schedule (osaka on Hardhat, Glamsterdam on Sepolia)', function () 
     expect(glamsterdamGas({ gasUsed: 100000, writes: { ...none, unmodelled: 1 } })).to.equal(null);
   });
 
-  it('matches the gas tables of README.md and results/README.md', function () {
-    expect(Object.keys(measured), 'the first test must run first').to.include.members(Object.keys(ROWS));
+  it('matches the gas figures of README.md, results/README.md and CHANGELOG.md', function () {
+    expect(Object.keys(measured), 'the first test must run first').to.include.members([...Object.keys(ROWS), 'placeholderRevoke']);
     const readme = readDoc('README.md');
     const results = readDoc('results/README.md');
+    const changelog = readDoc('CHANGELOG.md');
     for (const [name, label] of Object.entries(ROWS)) {
       const m = measured[name];
       const a = row(readme, 'README.md', label);
-      expect([firstNumber(a[1]), firstNumber(a[2]), firstNumber(a[3])], `README.md ${name}`).to.deep.equal([m.osaka, m.sepolia, m.slots]);
+      expect(a.slice(1), `README.md ${name}`).to.deep.equal([fmt(m.osaka), fmt(m.sepolia), String(m.slots)]);
       const b = row(results, 'results/README.md', label);
-      expect([firstNumber(b[1]), firstNumber(b[2])], `results/README.md ${name}`).to.deep.equal([m.osaka, m.sepolia]);
+      expect(b[1], `results/README.md ${name} osaka`).to.match(numberCell(m.osaka));
+      expect(b[2], `results/README.md ${name} Glamsterdam`).to.equal(fmt(m.sepolia));
     }
-    expect(firstNumber(row(readme, 'README.md', ROWS.deploy)[0]), 'README.md code bytes').to.equal(measured.codeBytes);
+    expect(row(readme, 'README.md', ROWS.deploy)[0]).to.equal(`Deployment (${fmt(measured.codeBytes)} bytes of code)`);
+    expect(row(results, 'results/README.md', ROWS.createIssuer)[3]).to.equal(fmt(measured.placeholderCreate));
+    expect(row(results, 'results/README.md', ROWS.revoke)[3]).to.match(numberCell(measured.placeholderRevoke));
+    expect(row(results, 'results/README.md', ROWS.deploy)[3]).to.equal('');
+    expect(row(results, 'results/README.md', ROWS.createSubject)[3]).to.equal('');
+
     const slots = results.match(/create (\d+), (\d+), (\d+) and (\d+) new storage slots/);
     expect(slots && slots.slice(1).map(Number), 'results/README.md slot sentence')
       .to.deep.equal(Object.keys(ROWS).map((k) => measured[k].slots));
-    const code = results.match(/its ([\d,]+) bytes of code/);
-    expect(code && Number(code[1].replace(/,/g, '')), 'results/README.md code bytes').to.equal(measured.codeBytes);
+    expect(results).to.include(`its ${fmt(measured.codeBytes)} bytes of code`);
+    const perSlot = Math.round((GLAMSTERDAM.setCold - OSAKA.setCold) / 1000) * 1000;
+    expect(results).to.include(`about ${fmt(perSlot)} gas more`);
+    expect(results).to.include(`base block ${fmt(SEPOLIA_BASE_BLOCK)}`);
+    for (const n of [measured.deploy.osaka, measured.codeBytes, measured.createIssuer.osaka, measured.createSubject.osaka,
+      measured.revoke.osaka]) {
+      expect(changelog, `CHANGELOG.md ${fmt(n)}`).to.include(fmt(n));
+    }
   });
 });

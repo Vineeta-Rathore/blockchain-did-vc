@@ -4,8 +4,8 @@
 //   p95             nearest rank: the ceil(0.95 n)-th smallest value (numpy method="inverted_cdf")
 //   medianCI        distribution-free interval for the median from order statistics (exact binomial)
 //   bootstrap       percentile bootstrap with a seeded generator (used only for paired speed-ups)
-//   cluster         percentile bootstrap over clusters (processes or blocks): whole clusters are resampled, because
-//                   samples within one process or one block are not independent of each other
+//   clusterMedianCI order-statistic interval for the median of the cluster medians (one median per process or block),
+//                   because samples within one process or one block are not independent of each other
 // The "July-style" functions reproduce the definitions behind the July 2026 figures as first reported, for comparison only.
 
 function sorted(values) {
@@ -93,24 +93,19 @@ function bootstrapCI(values, statistic, { resamples = 10000, seed = 20261111, al
   };
 }
 
-// Resamples whole clusters with replacement and computes the statistic of the pooled values of each resample.
-function clusterBootstrapCI(clusters, statistic, { resamples = 10000, seed = 20261111, alpha = 0.05 } = {}) {
-  if (!clusters.length || clusters.some((c) => !c.length)) throw new Error('clusterBootstrapCI needs non-empty clusters');
-  const next = rng(seed);
-  const k = clusters.length;
-  const stats = new Array(resamples);
-  for (let b = 0; b < resamples; b++) {
-    const pooled = [];
-    for (let i = 0; i < k; i++) pooled.push(...clusters[Math.floor(next() * k)]);
-    stats[b] = statistic(pooled);
+// Distribution-free interval for the median of the cluster medians (the typical process or block), with its exact
+// coverage. The ranks are those of medianCI at 95%; with fewer than six clusters no pair of ranks reaches 95%, so the
+// range of the cluster medians is used, with coverage 1 - 2 (1/2)^k (93.75% for five). A percentile bootstrap that
+// resamples clusters covers only about 80-88% at five or ten clusters, so it is not used.
+function clusterMedianCI(medians) {
+  if (!medians.length || medians.some((v) => typeof v !== 'number' || !Number.isFinite(v))) {
+    throw new Error('clusterMedianCI needs a non-empty list of finite numbers');
   }
-  return {
-    lower: quantileType7(stats, alpha / 2),
-    upper: quantileType7(stats, 1 - alpha / 2),
-    resamples,
-    seed,
-    clusters: k,
-  };
+  const ci = medianCI(medians);
+  if (ci.lower !== null) return { ...ci, clusters: medians.length };
+  const x = sorted(medians);
+  const k = x.length;
+  return { lower: x[0], upper: x[k - 1], ranks: [1, k], coverage: 1 - 2 * 0.5 ** k, clusters: k };
 }
 
 function summary(values) {
@@ -157,7 +152,7 @@ const julyStyle = {
 module.exports = {
   binomialCdf,
   bootstrapCI,
-  clusterBootstrapCI,
+  clusterMedianCI,
   julyStyle,
   mean,
   median,

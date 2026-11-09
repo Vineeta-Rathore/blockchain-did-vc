@@ -7,7 +7,7 @@
  *
  * The client uses a fixed network (no chain-ID request before each call). Per-step times (B0, V1-V8) are recorded
  * when the verifier supports them (version 1.1.0). The script also runs on a version 1.0.0 checkout with
- * scripts/lib/fixtures.js copied next to it (the R1-code run): that verifier has no per-step times and no
+ * scripts/lib/fixtures.js copied next to it (to time version 1.0.0 with this harness): that verifier has no per-step times and no
  * checkedAtBlock, so only the totals are recorded. For that reason the script needs nothing else from scripts/lib.
  */
 const fs = require('fs');

@@ -148,7 +148,7 @@ describe("DIDRegistry", function () {
   });
 
   describe("Controller Management", function () {
-    it("Should transfer DID control", async function () {
+    it("Should transfer DID control in two steps: proposal, then acceptance by the new address", async function () {
       const didId = "did:example:transfer-test";
       const verificationMethods = ["key1"];
       const services = ["service1"];
@@ -158,9 +158,13 @@ describe("DIDRegistry", function () {
 
       await expect(
         didRegistry.connect(user1).changeController(didId, user2.address)
-      ).to.emit(didRegistry, "ControllerChanged");
+      ).to.emit(didRegistry, "ControllerChangeProposed");
+      expect(await didRegistry.getController(didId)).to.equal(user1.address);
+      expect(await didRegistry.getPendingController(didId)).to.equal(user2.address);
 
+      await expect(didRegistry.connect(user2).acceptController(didId)).to.emit(didRegistry, "ControllerChanged");
       expect(await didRegistry.getController(didId)).to.equal(user2.address);
+      expect(await didRegistry.getPendingController(didId)).to.equal(ethers.constants.AddressZero);
     });
 
     it("Should get DIDs by controller", async function () {
@@ -190,6 +194,152 @@ describe("DIDRegistry", function () {
       await expect(
         didRegistry.connect(user2).changeController(didId, user2.address)
       ).to.be.revertedWith("DIDRegistry: Not authorized");
+    });
+  });
+
+  describe("Two-step controller handover", function () {
+    const didId = "did:example:handover";
+    const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("handover"));
+    const topic = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(didId));
+    // ethers v5 decodes these events with positional keys only (didId, controller, proposed or new address, timestamp)
+    const eventOf = (receipt, name) => receipt.events.find((e) => e.event === name);
+    const notProposed = "DIDRegistry: Not the proposed controller";
+
+    beforeEach(async function () {
+      await didRegistry.connect(user1).createDID(didId, ["key1"], [], dataHash);
+    });
+
+    it("emits the proposal with the DID, the controller and the proposed address", async function () {
+      const receipt = await (await didRegistry.connect(user1).changeController(didId, user2.address)).wait();
+      const e = eventOf(receipt, "ControllerChangeProposed");
+      expect(e.args[0].hash).to.equal(topic);
+      expect(e.args[1]).to.equal(user1.address);
+      expect(e.args[2]).to.equal(user2.address);
+      expect(e.args[3].toNumber()).to.equal((await ethers.provider.getBlock(receipt.blockNumber)).timestamp);
+    });
+
+    it("moves control, the reverse lookup and the nonce only on acceptance, and emits ControllerChanged", async function () {
+      await didRegistry.connect(user1).changeController(didId, user2.address);
+      expect(await didRegistry.getDIDsByController(user1.address)).to.deep.equal([didId]);
+      expect(await didRegistry.getDIDsByController(user2.address)).to.deep.equal([]);
+      const nonceBefore = (await didRegistry.getDIDDocument(didId)).nonce;
+
+      const receipt = await (await didRegistry.connect(user2).acceptController(didId)).wait();
+      const e = eventOf(receipt, "ControllerChanged");
+      expect(e.args[0].hash).to.equal(topic);
+      expect(e.args[1]).to.equal(user1.address);
+      expect(e.args[2]).to.equal(user2.address);
+      expect(await didRegistry.getDIDsByController(user1.address)).to.deep.equal([]);
+      expect(await didRegistry.getDIDsByController(user2.address)).to.deep.equal([didId]);
+      expect((await didRegistry.getDIDDocument(didId)).nonce).to.equal(nonceBefore.add(1));
+    });
+
+    it("lets the old controller act until acceptance, and only the new one after it", async function () {
+      await didRegistry.connect(user1).changeController(didId, user2.address);
+      await expect(didRegistry.connect(user1).rotateKey(didId, 0, "key2")).to.emit(didRegistry, "KeyRotated");
+      await expect(didRegistry.connect(user2).rotateKey(didId, 0, "key3")).to.be.revertedWith("DIDRegistry: Not authorized");
+      await didRegistry.connect(user2).acceptController(didId);
+      await expect(didRegistry.connect(user1).rotateKey(didId, 0, "key4")).to.be.revertedWith("DIDRegistry: Not authorized");
+      await expect(didRegistry.connect(user2).rotateKey(didId, 0, "key5")).to.emit(didRegistry, "KeyRotated");
+    });
+
+    it("refuses acceptance by any other address, without a proposal, and a second time", async function () {
+      await expect(didRegistry.connect(user2).acceptController(didId)).to.be.revertedWith(notProposed);
+      await didRegistry.connect(user1).changeController(didId, user2.address);
+      await expect(didRegistry.connect(verifier).acceptController(didId)).to.be.revertedWith(notProposed);
+      await expect(didRegistry.connect(user1).acceptController(didId)).to.be.revertedWith(notProposed);
+      await didRegistry.connect(user2).acceptController(didId);
+      await expect(didRegistry.connect(user2).acceptController(didId)).to.be.revertedWith(notProposed);
+    });
+
+    it("refuses the zero address and the current controller as proposals", async function () {
+      await expect(
+        didRegistry.connect(user1).changeController(didId, ethers.constants.AddressZero)
+      ).to.be.revertedWith("DIDRegistry: Invalid controller");
+      await expect(
+        didRegistry.connect(user1).changeController(didId, user1.address)
+      ).to.be.revertedWith("DIDRegistry: Already the controller");
+    });
+
+    it("replaces an earlier proposal with a later one", async function () {
+      await didRegistry.connect(user1).changeController(didId, user2.address);
+      await didRegistry.connect(user1).changeController(didId, verifier.address);
+      expect(await didRegistry.getPendingController(didId)).to.equal(verifier.address);
+      await expect(didRegistry.connect(user2).acceptController(didId)).to.be.revertedWith(notProposed);
+      await didRegistry.connect(verifier).acceptController(didId);
+      expect(await didRegistry.getController(didId)).to.equal(verifier.address);
+    });
+
+    it("lets only the controller cancel a proposal, and emits the cancellation", async function () {
+      await expect(didRegistry.connect(user1).cancelControllerChange(didId)).to.be.revertedWith(
+        "DIDRegistry: No pending controller"
+      );
+      await didRegistry.connect(user1).changeController(didId, user2.address);
+      await expect(didRegistry.connect(user2).cancelControllerChange(didId)).to.be.revertedWith("DIDRegistry: Not authorized");
+      const receipt = await (await didRegistry.connect(user1).cancelControllerChange(didId)).wait();
+      const e = eventOf(receipt, "ControllerChangeCancelled");
+      expect(e.args[0].hash).to.equal(topic);
+      expect(e.args[1]).to.equal(user1.address);
+      expect(e.args[2]).to.equal(user2.address);
+      expect(await didRegistry.getPendingController(didId)).to.equal(ethers.constants.AddressZero);
+      await expect(didRegistry.connect(user2).acceptController(didId)).to.be.revertedWith(notProposed);
+    });
+
+    it("drops a pending proposal when the DID is deactivated, so it cannot be accepted after reactivation", async function () {
+      await didRegistry.connect(user1).changeController(didId, user2.address);
+      const receipt = await (await didRegistry.connect(user1).deactivateDID(didId)).wait();
+      expect(eventOf(receipt, "ControllerChangeCancelled").args[2]).to.equal(user2.address);
+      expect(await didRegistry.getPendingController(didId)).to.equal(ethers.constants.AddressZero);
+      await didRegistry.connect(user1).reactivateDID(didId);
+      await expect(didRegistry.connect(user2).acceptController(didId)).to.be.revertedWith(notProposed);
+    });
+
+    it("blocks proposal and acceptance while paused, but not cancellation", async function () {
+      await didRegistry.connect(user1).changeController(didId, user2.address);
+      await didRegistry.connect(owner).pause();
+      await expect(didRegistry.connect(user1).changeController(didId, verifier.address)).to.be.revertedWith(
+        "DIDRegistry: Contract paused"
+      );
+      await expect(didRegistry.connect(user2).acceptController(didId)).to.be.revertedWith("DIDRegistry: Contract paused");
+      await expect(didRegistry.connect(user1).cancelControllerChange(didId)).to.emit(didRegistry, "ControllerChangeCancelled");
+      await didRegistry.connect(owner).unpause();
+      await expect(didRegistry.connect(user2).acceptController(didId)).to.be.revertedWith(notProposed);
+    });
+  });
+
+  describe("Storage without copies (ABI unchanged)", function () {
+    const didId = "did:example:layout";
+    const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("layout"));
+
+    it("returns the verification methods as the authentication methods after create, update and rotation", async function () {
+      await didRegistry.connect(user1).createDID(didId, ["A", "B"], ["s"], dataHash);
+      expect((await didRegistry.getDIDDocument(didId)).authenticationMethods).to.deep.equal(["A", "B"]);
+      await didRegistry.connect(user1).updateDID(didId, ["C"], ["s"], dataHash);
+      expect((await didRegistry.getDIDDocument(didId)).authenticationMethods).to.deep.equal(["C"]);
+      await didRegistry.connect(user1).rotateKey(didId, 0, "D");
+      const doc = await didRegistry.getDIDDocument(didId);
+      expect(doc.verificationMethods).to.deep.equal(["D"]);
+      expect(doc.authenticationMethods).to.deep.equal(["D"]);
+    });
+
+    it("returns an empty entry for a credential that is not revoked", async function () {
+      await didRegistry.connect(user1).createDID(didId, ["A"], [], dataHash);
+      const entry = await didRegistry.getRevocationEntry(didId, "cred:never-revoked");
+      expect(entry.credentialId).to.equal("");
+      expect(entry.revokedAt.toNumber()).to.equal(0);
+      expect(entry.reasonCode).to.equal(0);
+      expect(entry.isRevoked).to.be.false;
+    });
+
+    it("stores a revocation in a single new storage slot", async function () {
+      const { storageWrites } = require("../scripts/lib/gas-schedule");
+      const { network } = require("hardhat");
+      await didRegistry.connect(user1).createDID(didId, ["A"], [], dataHash);
+      const receipt = await (await didRegistry.connect(user1).revokeCredential(didId, `urn:uuid:${"0".repeat(36)}`, 9)).wait();
+      const writes = await storageWrites(
+        network.provider, receipt.transactionHash, didRegistry.address, ethers.utils.hexValue(receipt.blockNumber - 1)
+      );
+      expect(writes.setCold + writes.setWarm).to.equal(1);
     });
   });
 

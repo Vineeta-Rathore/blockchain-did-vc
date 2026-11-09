@@ -4,6 +4,8 @@
 //   p95             nearest rank: the ceil(0.95 n)-th smallest value (numpy method="inverted_cdf")
 //   medianCI        distribution-free interval for the median from order statistics (exact binomial)
 //   bootstrap       percentile bootstrap with a seeded generator (used only for paired speed-ups)
+//   cluster         percentile bootstrap over clusters (processes or blocks): whole clusters are resampled, because
+//                   samples within one process or one block are not independent of each other
 // The "July-style" functions reproduce the definitions behind the July 2026 figures as first reported, for comparison only.
 
 function sorted(values) {
@@ -91,6 +93,26 @@ function bootstrapCI(values, statistic, { resamples = 10000, seed = 20261111, al
   };
 }
 
+// Resamples whole clusters with replacement and computes the statistic of the pooled values of each resample.
+function clusterBootstrapCI(clusters, statistic, { resamples = 10000, seed = 20261111, alpha = 0.05 } = {}) {
+  if (!clusters.length || clusters.some((c) => !c.length)) throw new Error('clusterBootstrapCI needs non-empty clusters');
+  const next = rng(seed);
+  const k = clusters.length;
+  const stats = new Array(resamples);
+  for (let b = 0; b < resamples; b++) {
+    const pooled = [];
+    for (let i = 0; i < k; i++) pooled.push(...clusters[Math.floor(next() * k)]);
+    stats[b] = statistic(pooled);
+  }
+  return {
+    lower: quantileType7(stats, alpha / 2),
+    upper: quantileType7(stats, 1 - alpha / 2),
+    resamples,
+    seed,
+    clusters: k,
+  };
+}
+
 function summary(values) {
   if (!values.length || values.some((v) => typeof v !== 'number' || !Number.isFinite(v))) {
     throw new Error('summary needs a non-empty list of finite numbers');
@@ -135,6 +157,7 @@ const julyStyle = {
 module.exports = {
   binomialCdf,
   bootstrapCI,
+  clusterBootstrapCI,
   julyStyle,
   mean,
   median,

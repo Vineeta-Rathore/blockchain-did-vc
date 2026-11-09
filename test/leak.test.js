@@ -96,9 +96,10 @@ const clean = (text) => !text.includes(TOKEN) && !text.includes('/sepolia/FAKE')
 
 function runScript(script, args, url) {
   return new Promise((resolve) => {
+    const started = Date.now();
     execFile(process.execPath, [path.join(ROOT, 'scripts', script), ...args], {
       cwd: ROOT, timeout: 120000, env: { ...process.env, SEPOLIA_RPC_URL: url },
-    }, (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stdout, stderr }));
+    }, (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stdout, stderr, ms: Date.now() - started }));
   });
 }
 
@@ -120,7 +121,7 @@ describe('leak tests: RPC failures never reveal the URL and are never retried', 
         const redact = R.makeRedactor(url);
         const written = [];
         const write = R.makeWriter(redact, (t) => written.push(t));
-        const provider = R.makeProvider(url, { network: { name: 'local', chainId: 1337 }, timeoutMs: 1500 });
+        const provider = R.makeProvider(url, { network: { name: 'local', chainId: 1337 }, timeoutMs: 500 });
         const counter = R.requestCounter(provider);
         const iface = new ethers.utils.Interface(ABI);
         const contract = new ethers.Contract(ADDRESS, ABI, provider);
@@ -206,6 +207,8 @@ describe('leak tests: RPC failures never reveal the URL and are never retried', 
             expect(r.code).to.equal(0);
             expect(logText).to.include('"kind":"sepolia"');
             expect(r.stdout).to.include('self-scan: pass');
+            // ethers v5 leaves its 30 s request timer running after an HTTP 429; the script must not wait for it.
+            expect(r.ms, 'exit after the run, not after the request timeout').to.be.below(10000);
           }
         } finally {
           server.close();

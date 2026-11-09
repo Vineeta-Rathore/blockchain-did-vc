@@ -98,22 +98,29 @@ async function runP(verifier, credential) {
   };
 }
 
-// One mode, with request counts (by method) and the chain-ID check during its window.
+// One mode, with request counts (by method), the chain-ID check and the new sockets (ctx.sockets, from
+// rpc.installAgents) during its timer.
 async function runMode(mode, ctx) {
   const before = ctx.counter.snapshot();
+  const socketCount = () => (ctx.sockets ? ctx.sockets.newSockets : null);
+  const socketsSince = (n) => (n === null ? {} : { newSocketsDuringTimer: socketCount() - n });
   try {
     if (mode === 'P') {
+      const s0 = socketCount();
       const r = await runP(ctx.verifier, ctx.credential);
+      const sockets = socketsSince(s0);
       const requests = ctx.counter.since(before);
-      return { mode, ...r, requests, chainIdDuringTimer: requests.eth_chainId || 0 };
+      return { mode, ...r, requests, chainIdDuringTimer: requests.eth_chainId || 0, ...sockets };
     }
     const pinned = await pinnedBlock(ctx.provider, ctx.blockLag);
     const timedBefore = ctx.counter.snapshot();
+    const s0 = socketCount();
     let r;
     if (mode === 'S') r = await runS(ctx.provider, ctx.calls, pinned.blockNumber);
     else if (mode === 'C') r = await runC(ctx.provider, ctx.calls, pinned.blockNumber);
     else if (mode === 'Bt') r = await runBt(ctx.provider.connection, ctx.calls, pinned.blockNumber);
     else throw new Error('unknown mode');
+    const sockets = socketsSince(s0);
     const duringTimer = ctx.counter.since(timedBefore);
     const sane = decodeAndCheck(ctx.iface, ctx.calls, r.raw, ctx.credential);
     return {
@@ -125,6 +132,7 @@ async function runMode(mode, ctx) {
       sane,
       requests: { ...ctx.counter.since(before), ...(mode === 'Bt' ? { batch: 1 } : {}) },
       chainIdDuringTimer: duringTimer.eth_chainId || 0,
+      ...sockets,
     };
   } catch (error) {
     return { mode, total_ms: null, error: errorCode(error), requests: ctx.counter.since(before) };
@@ -132,6 +140,15 @@ async function runMode(mode, ctx) {
 }
 
 const ORDERS = [['P', 'S', 'C', 'Bt'], ['S', 'C', 'Bt', 'P'], ['C', 'Bt', 'P', 'S'], ['Bt', 'P', 'S', 'C']];
+
+// The order of iteration `index` (from 0) of block `block` (1-10; 0 for the pilot), when each block has `perBlock`
+// iterations of this kind (warm-up or timed). It depends only on the block and the iteration, so a block run on its
+// own (--only-block, a reserve slot) uses the orders it has in the full run, and over the ten blocks each order is
+// used equally often.
+function orderFor({ block, index, perBlock }) {
+  const position = (Math.max(block, 1) - 1) * perBlock + index;
+  return ORDERS[position % ORDERS.length];
+}
 
 async function coldStart(provider) {
   const t0 = now();
@@ -160,4 +177,4 @@ async function cacheCheck(ctx, freshCredentialId) {
   }
 }
 
-module.exports = { ORDERS, blockNumber, cacheCheck, coldStart, readCalls, runBt, runC, runMode, runP, runS };
+module.exports = { ORDERS, blockNumber, cacheCheck, coldStart, orderFor, readCalls, runBt, runC, runMode, runP, runS };

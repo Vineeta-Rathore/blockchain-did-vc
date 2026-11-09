@@ -1,9 +1,8 @@
-const { VerifiableCredentialService } = require('./vc-service');
+const { VerifiableCredentialService, VC_V2_CONTEXT } = require('./vc-service');
 
 // Default clock tolerance for validFrom. RFC 7519 (sections 4.1.4 and 4.1.5) allows "some small leeway, usually
 // no more than a few minutes, to account for clock skew"; one minute is used here.
 const DEFAULT_CLOCK_TOLERANCE_MS = 60 * 1000;
-const VC_V2_CONTEXT = 'https://www.w3.org/ns/credentials/v2';
 
 // VC 2.0 (section 4.9) requires validFrom and validUntil to be XML Schema dateTimeStamp values: a date, a time and a
 // time zone. Anything else (no time zone, which Date.parse would read in the verifier's local zone, or other formats
@@ -25,10 +24,15 @@ function isNonNegativeInteger(value) {
   return Number.isInteger(value) && value >= 0;
 }
 
-// Error codes only: never copy error.message, which can contain the RPC URL.
+// Error codes only: never copy error.message, which can contain the RPC URL. A string code of capitals is kept, a
+// JSON-RPC error number becomes RPC_<n> and an HTTP status HTTP_<n>; anything else is UNKNOWN_ERROR. The Sepolia
+// scripts use this same function (scripts/lib/rpc.js), so a failure is reported alike in every mode.
 function errorCode(error) {
   const code = error && error.code;
-  return typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(code) ? code : 'UNKNOWN_ERROR';
+  if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(code)) return code;
+  if (typeof code === 'number' && Number.isInteger(code)) return `RPC_${code}`;
+  if (error && Number.isInteger(error.status)) return `HTTP_${error.status}`;
+  return 'UNKNOWN_ERROR';
 }
 
 class CredentialVerifierService {
@@ -244,4 +248,4 @@ class CredentialVerifierService {
   }
 }
 
-module.exports = { CredentialVerifierService, DEFAULT_CLOCK_TOLERANCE_MS };
+module.exports = { CredentialVerifierService, DEFAULT_CLOCK_TOLERANCE_MS, errorCode };

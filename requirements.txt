@@ -1,0 +1,4 @@
+# Python packages for scripts/check_stats_numpy.py (numpy) and scripts/plot-latency.py (numpy, matplotlib).
+# Tested with Python 3.12.2.
+numpy==1.26.2
+matplotlib==3.10.5

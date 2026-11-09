@@ -11,13 +11,6 @@ async function main() {
   await didRegistry.deployed();
 
   console.log("DID Registry deployed to:", didRegistry.address);
-
-  const deploymentInfo = {
-    contractAddress: didRegistry.address,
-    deployer: deployer.address,
-    network: "localhost"
-  };
-
   console.log("Deployment completed successfully");
 }
 

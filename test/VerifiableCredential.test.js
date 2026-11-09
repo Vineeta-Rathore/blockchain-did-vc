@@ -432,16 +432,27 @@ describe('DID and VC credential flow', function () {
     });
 
     it('judges the validity period at the moment reported as checkedAt', async function () {
+      // A stubbed clock: the first contract read moves it 10 s on, past validUntil. A verifier that read the clock
+      // again after its reads would report the credential as expired.
+      const realNow = Date.now;
+      const t0 = realNow();
+      let fake = t0;
       const slow = {
         provider: didRegistry.provider,
-        verifyDID: async (did, o) => { await new Promise((r) => setTimeout(r, 1500)); return didRegistry.verifyDID(did, o); },
+        verifyDID: async (did, o) => { fake += 10000; return didRegistry.verifyDID(did, o); },
         getDIDDocument: (did, o) => didRegistry.getDIDDocument(did, o),
         isCredentialRevoked: (did, id, o) => didRegistry.isCredentialRevoked(did, id, o),
       };
-      const validUntil = new Date(Date.now() + 1000).toISOString();
-      const result = await new CredentialVerifierService(slow).verifyCredential(resign({ ...issueCredential(), validUntil }));
-      expect(Date.parse(result.checkedAt)).to.be.below(Date.parse(validUntil));
-      expect(result.reason).to.equal('VALID');
+      const credential = resign({ ...issueCredential(), validUntil: new Date(t0 + 5000).toISOString() });
+      Date.now = () => fake;
+      try {
+        const result = await new CredentialVerifierService(slow).verifyCredential(credential);
+        expect(fake).to.be.at.least(t0 + 10000);
+        expect(result.checkedAt).to.equal(new Date(t0).toISOString());
+        expect(result.reason).to.equal('VALID');
+      } finally {
+        Date.now = realNow;
+      }
     });
 
     it('reads the newest block number with a plain eth_blockNumber request', async function () {

@@ -345,6 +345,7 @@ class VerifiableCredentialService {
 }
 
 module.exports = {
+  VC_V2_CONTEXT,
   VerifiableCredentialService,
   base58btc,
   canonicalize,

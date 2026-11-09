@@ -4,17 +4,22 @@ pragma solidity ^0.8.19;
 /**
  * @title DIDRegistry
  * @notice Registry of DID documents with controller-authorised updates, key rotation and
- *         deactivation, and per-credential revocation keyed by the issuer DID.
- * @dev Administrators can pause registration and document changes, but not revocation or
- *      deactivation, and every administrator action emits an event. Revocation records carry
- *      an RFC 5280 (section 5.3.1) reason code instead of free text.
+ *         deactivation, a two-step controller handover, and per-credential revocation keyed by
+ *         the issuer DID.
+ * @dev Administrators can pause registration and document changes, but not revocation,
+ *      deactivation or the cancellation of a handover, and every administrator action emits an
+ *      event. Revocation records carry an RFC 5280 (section 5.3.1) reason code instead of free
+ *      text. Storage holds no copies: the authentication methods returned by getDIDDocument are
+ *      the verification methods, and getRevocationEntry returns the credential ID it is asked
+ *      about.
  */
 contract DIDRegistry {
-    
+
     // ========== STRUCTS ==========
-    
+
     /**
-     * @notice W3C DID Document representation
+     * @notice W3C DID Document representation, as returned by getDIDDocument
+     * @dev authenticationMethods is always equal to verificationMethods and is not stored.
      */
     struct DIDDocument {
         string id;                          // DID identifier (e.g., did:eth:0x123...)
@@ -30,12 +35,36 @@ contract DIDRegistry {
     }
 
     /**
-     * @notice Credential revocation entry
+     * @notice Credential revocation entry, as returned by getRevocationEntry
      */
     struct RevocationEntry {
         string credentialId;
         uint256 revokedAt;
         uint8 reasonCode;                   // RFC 5280 section 5.3.1 code; 0 = not stated
+        bool isRevoked;
+    }
+
+    /**
+     * @notice A DID document as stored (DIDDocument without the authentication methods)
+     */
+    struct DIDRecord {
+        string id;
+        address controller;
+        string[] verificationMethods;
+        string[] services;
+        uint256 created;
+        uint256 updated;
+        bool active;
+        bytes32 dataHash;
+        uint256 nonce;
+    }
+
+    /**
+     * @notice A revocation as stored: one storage slot (the credential ID is the mapping key)
+     */
+    struct Revocation {
+        uint64 revokedAt;
+        uint8 reasonCode;
         bool isRevoked;
     }
 
@@ -49,92 +78,109 @@ contract DIDRegistry {
     }
 
     // ========== STATE VARIABLES ==========
-    
+
     // DID Documents storage
-    mapping(string => DIDDocument) private didDocuments;
-    
+    mapping(string => DIDRecord) private didDocuments;
+
     // Controller to DIDs mapping (for reverse lookup)
     mapping(address => string[]) private controllerDIDs;
-    
+
     // Admin registry
     mapping(address => bool) public isAdmin;
-    
+
     // Revocation registry
-    mapping(string => mapping(string => RevocationEntry)) private revocations;
-    
+    mapping(string => mapping(string => Revocation)) private revocations;
+
+    // Proposed new controller of a DID (two-step handover); zero if none
+    mapping(string => address) private pendingControllers;
+
     // Delegates for DIDs
     mapping(string => Delegate[]) private delegates;
-    
+
     // Attribute storage for flexible properties
     mapping(string => mapping(bytes32 => bytes)) private attributes;
-    
+
     // Nonce for each controller (replay protection)
     mapping(address => uint256) public nonces;
-    
+
     // Contract state
     bool public paused;
     address public owner;
 
     // ========== EVENTS ==========
-    
+
     event DIDCreated(
-        string indexed didId, 
+        string indexed didId,
         address indexed controller,
         uint256 timestamp
     );
-    
+
     event DIDUpdated(
-        string indexed didId, 
+        string indexed didId,
         bytes32 dataHash,
         uint256 timestamp
     );
-    
+
     event DIDDeactivated(
         string indexed didId,
         address indexed controller,
         uint256 timestamp
     );
-    
+
     event DIDReactivated(
         string indexed didId,
         address indexed controller,
         uint256 timestamp
     );
-    
+
     event ControllerChanged(
         string indexed didId,
         address indexed previousController,
         address indexed newController,
         uint256 timestamp
     );
-    
+
+    event ControllerChangeProposed(
+        string indexed didId,
+        address indexed controller,
+        address indexed proposedController,
+        uint256 timestamp
+    );
+
+    event ControllerChangeCancelled(
+        string indexed didId,
+        address indexed controller,
+        address indexed proposedController,
+        uint256 timestamp
+    );
+
     event KeyRotated(
         string indexed didId,
         string oldKey,
         string newKey,
         uint256 timestamp
     );
-    
+
     event CredentialRevoked(
         string indexed didId,
         string indexed credentialId,
         uint8 reasonCode,
         uint256 timestamp
     );
-    
+
     event DelegateAdded(
         string indexed didId,
         address indexed delegate,
         bytes32 delegateType,
         uint256 validity
     );
-    
+
     event DelegateRemoved(
         string indexed didId,
         address indexed delegate,
         bytes32 delegateType
     );
-    
+
     event AttributeChanged(
         string indexed didId,
         bytes32 indexed name,
@@ -151,7 +197,7 @@ contract DIDRegistry {
     event Unpaused(address indexed by);
 
     // ========== MODIFIERS ==========
-    
+
     modifier onlyController(string memory _didId) {
         require(
             didDocuments[_didId].controller == msg.sender,
@@ -159,7 +205,7 @@ contract DIDRegistry {
         );
         _;
     }
-    
+
     modifier onlyControllerOrDelegate(string memory _didId, bytes32 _delegateType) {
         require(
             didDocuments[_didId].controller == msg.sender ||
@@ -168,17 +214,17 @@ contract DIDRegistry {
         );
         _;
     }
-    
+
     modifier onlyAdmin() {
         require(isAdmin[msg.sender], "DIDRegistry: Admin access required");
         _;
     }
-    
+
     modifier whenNotPaused() {
         require(!paused, "DIDRegistry: Contract paused");
         _;
     }
-    
+
     modifier didExists(string memory _didId) {
         require(
             bytes(didDocuments[_didId].id).length > 0,
@@ -186,7 +232,7 @@ contract DIDRegistry {
         );
         _;
     }
-    
+
     modifier didActive(string memory _didId) {
         require(
             didDocuments[_didId].active,
@@ -196,7 +242,7 @@ contract DIDRegistry {
     }
 
     // ========== CONSTRUCTOR ==========
-    
+
     constructor() {
         owner = msg.sender;
         isAdmin[msg.sender] = true;
@@ -222,12 +268,11 @@ contract DIDRegistry {
             "DIDRegistry: DID already exists"
         );
         require(bytes(_didId).length > 0, "DIDRegistry: Invalid DID");
-        
-        didDocuments[_didId] = DIDDocument({
+
+        didDocuments[_didId] = DIDRecord({
             id: _didId,
             controller: msg.sender,
             verificationMethods: _verificationMethods,
-            authenticationMethods: _verificationMethods,  // Default: same as verification
             services: _services,
             created: block.timestamp,
             updated: block.timestamp,
@@ -235,10 +280,10 @@ contract DIDRegistry {
             dataHash: _dataHash,
             nonce: 0
         });
-        
+
         // Add to controller's DIDs list
         controllerDIDs[msg.sender].push(_didId);
-        
+
         emit DIDCreated(_didId, msg.sender, block.timestamp);
     }
 
@@ -261,31 +306,32 @@ contract DIDRegistry {
         didExists(_didId)
         onlyController(_didId)
     {
-        DIDDocument storage doc = didDocuments[_didId];
+        DIDRecord storage doc = didDocuments[_didId];
 
         doc.verificationMethods = _verificationMethods;
-        doc.authenticationMethods = _verificationMethods;
         doc.services = _services;
         doc.dataHash = _dataHash;
         doc.updated = block.timestamp;
         doc.nonce++;
-        
+
         emit DIDUpdated(_didId, _dataHash, block.timestamp);
     }
 
     /**
      * @notice Deactivate a DID (soft delete)
-     * @dev Not blocked by pause(), so that a controller can always deactivate.
+     * @dev Not blocked by pause(), so that a controller can always deactivate. A pending
+     *      controller handover is cancelled.
      * @param _didId DID to deactivate
      */
     function deactivateDID(string memory _didId)
         external
         didExists(_didId)
-        onlyController(_didId) 
+        onlyController(_didId)
     {
+        _cancelPendingController(_didId);
         didDocuments[_didId].active = false;
         didDocuments[_didId].updated = block.timestamp;
-        
+
         emit DIDDeactivated(_didId, msg.sender, block.timestamp);
     }
 
@@ -293,55 +339,99 @@ contract DIDRegistry {
      * @notice Reactivate a deactivated DID
      * @param _didId DID to reactivate
      */
-    function reactivateDID(string memory _didId) 
-        external 
+    function reactivateDID(string memory _didId)
+        external
         whenNotPaused
         didExists(_didId)
-        onlyController(_didId) 
+        onlyController(_didId)
     {
         require(!didDocuments[_didId].active, "DIDRegistry: DID is already active");
-        
+
         didDocuments[_didId].active = true;
         didDocuments[_didId].updated = block.timestamp;
-        
+
         emit DIDReactivated(_didId, msg.sender, block.timestamp);
     }
 
     /**
-     * @notice Transfer DID control to new address
+     * @notice Propose a new controller for a DID (first step of the handover)
+     * @dev Control moves only when the proposed address calls acceptController. A later proposal
+     *      replaces an earlier one. The controller keeps full control until acceptance.
      * @param _didId DID to transfer
-     * @param _newController New controller address
+     * @param _newController Proposed controller address
      */
     function changeController(
         string memory _didId,
         address _newController
-    ) external 
+    ) external
         whenNotPaused
         didExists(_didId)
         didActive(_didId)
-        onlyController(_didId) 
+        onlyController(_didId)
     {
         require(_newController != address(0), "DIDRegistry: Invalid controller");
-        
-        address previousController = didDocuments[_didId].controller;
-        
-        // Update controller
-        didDocuments[_didId].controller = _newController;
-        didDocuments[_didId].updated = block.timestamp;
-        didDocuments[_didId].nonce++;
-        
-        // Update controller DID lists
+        require(_newController != msg.sender, "DIDRegistry: Already the controller");
+
+        pendingControllers[_didId] = _newController;
+
+        emit ControllerChangeProposed(_didId, msg.sender, _newController, block.timestamp);
+    }
+
+    /**
+     * @notice Accept control of a DID (second step of the handover), called by the proposed address
+     * @param _didId DID to take over
+     */
+    function acceptController(string memory _didId)
+        external
+        whenNotPaused
+        didExists(_didId)
+        didActive(_didId)
+    {
+        require(
+            pendingControllers[_didId] == msg.sender && msg.sender != address(0),
+            "DIDRegistry: Not the proposed controller"
+        );
+        delete pendingControllers[_didId];
+
+        DIDRecord storage doc = didDocuments[_didId];
+        address previousController = doc.controller;
+        doc.controller = msg.sender;
+        doc.updated = block.timestamp;
+        doc.nonce++;
+
         _removeFromControllerList(previousController, _didId);
-        controllerDIDs[_newController].push(_didId);
-        
-        emit ControllerChanged(_didId, previousController, _newController, block.timestamp);
+        controllerDIDs[msg.sender].push(_didId);
+
+        emit ControllerChanged(_didId, previousController, msg.sender, block.timestamp);
+    }
+
+    /**
+     * @notice Withdraw a pending controller proposal
+     * @dev Not blocked by pause(), so that a mistaken proposal can be withdrawn before the
+     *      registry is unpaused.
+     * @param _didId DID whose proposal is withdrawn
+     */
+    function cancelControllerChange(string memory _didId)
+        external
+        didExists(_didId)
+        onlyController(_didId)
+    {
+        require(pendingControllers[_didId] != address(0), "DIDRegistry: No pending controller");
+        _cancelPendingController(_didId);
+    }
+
+    /**
+     * @notice The proposed new controller of a DID, or the zero address if there is none
+     */
+    function getPendingController(string memory _didId) external view returns (address) {
+        return pendingControllers[_didId];
     }
 
     /**
      * @notice Rotate a verification key
      * @dev Allowed while the DID is deactivated, so that a controller can replace a leaked key
-     *      before reactivating it. The old key is also replaced wherever it appears among the
-     *      authentication methods.
+     *      before reactivating it. The authentication methods are the verification methods, so
+     *      the key is rotated in both.
      * @param _didId DID to update
      * @param _keyIndex Index of key to rotate
      * @param _newKey New key value
@@ -355,19 +445,14 @@ contract DIDRegistry {
         didExists(_didId)
         onlyController(_didId)
     {
-        DIDDocument storage doc = didDocuments[_didId];
+        DIDRecord storage doc = didDocuments[_didId];
         require(_keyIndex < doc.verificationMethods.length, "DIDRegistry: Invalid key index");
 
         string memory oldKey = doc.verificationMethods[_keyIndex];
         doc.verificationMethods[_keyIndex] = _newKey;
-        // createDID and updateDID set the authentication methods to the verification methods, in the same order, so
-        // the entry at the same index is rotated; matching by value would also rewrite duplicates of the old key.
-        if (_keyIndex < doc.authenticationMethods.length) {
-            doc.authenticationMethods[_keyIndex] = _newKey;
-        }
         doc.updated = block.timestamp;
         doc.nonce++;
-        
+
         emit KeyRotated(_didId, oldKey, _newKey, block.timestamp);
     }
 
@@ -379,21 +464,33 @@ contract DIDRegistry {
      * @return exists Whether DID exists and is active
      */
     function verifyDID(string memory _didId) external view returns (bool exists) {
-        return didDocuments[_didId].active && 
+        return didDocuments[_didId].active &&
                bytes(didDocuments[_didId].id).length > 0;
     }
 
     /**
      * @notice Get full DID document
+     * @dev authenticationMethods is the list of verification methods (not stored separately).
      * @param _didId DID to retrieve
      * @return document The DID document
      */
-    function getDIDDocument(string memory _didId) 
-        external 
-        view 
-        returns (DIDDocument memory document) 
+    function getDIDDocument(string memory _didId)
+        external
+        view
+        returns (DIDDocument memory document)
     {
-        return didDocuments[_didId];
+        DIDRecord storage r = didDocuments[_didId];
+        string[] memory methods = r.verificationMethods;
+        document.id = r.id;
+        document.controller = r.controller;
+        document.verificationMethods = methods;
+        document.authenticationMethods = methods;
+        document.services = r.services;
+        document.created = r.created;
+        document.updated = r.updated;
+        document.active = r.active;
+        document.dataHash = r.dataHash;
+        document.nonce = r.nonce;
     }
 
     /**
@@ -401,10 +498,10 @@ contract DIDRegistry {
      * @param _controller Controller address
      * @return dids List of DIDs
      */
-    function getDIDsByController(address _controller) 
-        external 
-        view 
-        returns (string[] memory dids) 
+    function getDIDsByController(address _controller)
+        external
+        view
+        returns (string[] memory dids)
     {
         return controllerDIDs[_controller];
     }
@@ -414,10 +511,10 @@ contract DIDRegistry {
      * @param _didId DID to query
      * @return controller Controller address
      */
-    function getController(string memory _didId) 
-        external 
-        view 
-        returns (address controller) 
+    function getController(string memory _didId)
+        external
+        view
+        returns (address controller)
     {
         return didDocuments[_didId].controller;
     }
@@ -450,9 +547,8 @@ contract DIDRegistry {
             "DIDRegistry: Already revoked"
         );
 
-        revocations[_didId][_credentialId] = RevocationEntry({
-            credentialId: _credentialId,
-            revokedAt: block.timestamp,
+        revocations[_didId][_credentialId] = Revocation({
+            revokedAt: uint64(block.timestamp),
             reasonCode: _reasonCode,
             isRevoked: true
         });
@@ -475,6 +571,7 @@ contract DIDRegistry {
 
     /**
      * @notice Get revocation details
+     * @dev For a credential that is not revoked, every field is empty or zero.
      * @param _didId Issuer's DID
      * @param _credentialId Credential to query
      * @return entry Revocation entry
@@ -483,7 +580,15 @@ contract DIDRegistry {
         string memory _didId,
         string memory _credentialId
     ) external view returns (RevocationEntry memory entry) {
-        return revocations[_didId][_credentialId];
+        Revocation storage r = revocations[_didId][_credentialId];
+        if (r.isRevoked) {
+            entry = RevocationEntry({
+                credentialId: _credentialId,
+                revokedAt: r.revokedAt,
+                reasonCode: r.reasonCode,
+                isRevoked: true
+            });
+        }
     }
 
     // ========== DELEGATION ==========
@@ -500,17 +605,17 @@ contract DIDRegistry {
         address _delegate,
         bytes32 _delegateType,
         uint256 _validity
-    ) external 
+    ) external
         whenNotPaused
         didExists(_didId)
-        onlyController(_didId) 
+        onlyController(_didId)
     {
         delegates[_didId].push(Delegate({
             delegateAddress: _delegate,
             delegateType: _delegateType,
             validity: block.timestamp + _validity
         }));
-        
+
         emit DelegateAdded(_didId, _delegate, _delegateType, block.timestamp + _validity);
     }
 
@@ -524,10 +629,10 @@ contract DIDRegistry {
         string memory _didId,
         address _delegate,
         bytes32 _delegateType
-    ) external 
+    ) external
         whenNotPaused
         didExists(_didId)
-        onlyController(_didId) 
+        onlyController(_didId)
     {
         Delegate[] storage delegateList = delegates[_didId];
         for (uint i = 0; i < delegateList.length; i++) {
@@ -572,14 +677,14 @@ contract DIDRegistry {
         string memory _didId,
         bytes32 _name,
         bytes memory _value
-    ) external 
+    ) external
         whenNotPaused
         didExists(_didId)
-        onlyController(_didId) 
+        onlyController(_didId)
     {
         attributes[_didId][_name] = _value;
         didDocuments[_didId].updated = block.timestamp;
-        
+
         emit AttributeChanged(_didId, _name, _value, block.timestamp);
     }
 
@@ -597,7 +702,7 @@ contract DIDRegistry {
     }
 
     // ========== ADMIN FUNCTIONS ==========
-    
+
     function addAdmin(address _admin) external onlyAdmin {
         isAdmin[_admin] = true;
         emit AdminAdded(_admin, msg.sender);
@@ -630,6 +735,14 @@ contract DIDRegistry {
      */
     function _isValidReasonCode(uint8 _code) internal pure returns (bool) {
         return _code <= 10 && _code != 6 && _code != 7 && _code != 8;
+    }
+
+    function _cancelPendingController(string memory _didId) internal {
+        address proposed = pendingControllers[_didId];
+        if (proposed != address(0)) {
+            delete pendingControllers[_didId];
+            emit ControllerChangeCancelled(_didId, didDocuments[_didId].controller, proposed, block.timestamp);
+        }
     }
 
     function _removeFromControllerList(address _controller, string memory _didId) internal {

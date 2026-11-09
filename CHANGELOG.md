@@ -12,9 +12,17 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   `getRevocationEntry` carry `uint8 reasonCode` instead of `string reason`.
 - `pause()` no longer blocks `revokeCredential` or `deactivateDID`.
 - `rotateKey` and `updateDID` also work on a deactivated DID, which stays deactivated (repair before reactivation).
-- `rotateKey` also replaces the key at the same position of the authentication methods, and `updateDID` sets the
-  authentication methods to the new verification methods. In version 1.0.0 the authentication methods kept the
-  original keys.
+- A handover takes two steps: `changeController` records a proposal (`ControllerChangeProposed`), and control moves
+  when the proposed address calls the new `acceptController` (`ControllerChanged`). New: `cancelControllerChange`
+  (also while paused; `ControllerChangeCancelled`) and `getPendingController`. Deactivation withdraws a pending
+  proposal. In version 1.0.0, `changeController` moved control at once, without the new address's consent.
+- The authentication methods are no longer stored: `getDIDDocument` returns the verification methods in that field,
+  so `rotateKey` and `updateDID` change both. In version 1.0.0 the stored authentication methods kept the original
+  keys.
+- A revocation entry is stored in one slot (time, reason code, flag); `getRevocationEntry` returns the credential ID
+  it was asked about, and an empty entry for a credential that is not revoked. The return types are unchanged.
+  Gas with realistic documents: `revokeCredential` 56,765 instead of 145,713 (osaka), `createDID` 662,928 and 489,098
+  instead of 863,141 and 689,311.
 - Administrator actions emit events: `AdminAdded`, `AdminRemoved`, `Paused`, `Unpaused`.
 - The contract description (NatSpec) states what the registry does and what a pause blocks.
 - The DID method name is now `did:smid`.
@@ -52,8 +60,7 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   `validFrom`.
 - The proof configuration was hashed without `@context`, so proof values differed from other `eddsa-jcs-2022`
   implementations.
-- After `rotateKey`, the rotated-out key stayed in the authentication methods. (The first fix matched the old key by
-  value, which rewrote duplicates of it; the key at the same position is now rotated.)
+- After `rotateKey`, the rotated-out key stayed in the authentication methods.
 - A correctly signed credential with an empty `id` verified as `VALID`, and one without an `id` failed at the
   revocation check with `VERIFICATION_ERROR`. Revocation is keyed by the credential `id`, so both now fail at V1 with
   `MALFORMED_CREDENTIAL`.
@@ -63,7 +70,15 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   decode (15.9 s for 200,000 characters); impossible dates such as 30 February were rolled over and accepted.
 - The latency analysis counted failed Sepolia rows (no time) as 0 ms and paired them, and counted pilot rows; it now
   counts only successful measurements and reports the rest. The mode orders were unbalanced (orders 3 and 4 used 30
-  times, 1 and 2 used 20); each is now used 25 times.
+  times, 1 and 2 used 20); each is now used 25 times, also when a block is run again in a reserve slot.
+- Node's default HTTP agent closes idle sockets after 5 s and reuses the most recent one first, so the concurrent mode
+  could time new connections in some mode orders only. `measure-sepolia.js` now keeps sockets open and counts every
+  new one per row; the analysis reports such rows by mode and order.
+- After an HTTP 429, `measure-sepolia.js` waited for ethers' 30 s request timer before exiting; argument errors were
+  reported as `UNKNOWN_ERROR` (now `ARG_LOG_MISSING`, `ARG_BLOCK_LAG`, `ARG_TIMEOUT`). The verifier and the Sepolia
+  scripts reported the same JSON-RPC error with different codes; both now give `RPC_<n>` (and `HTTP_<n>`).
+- `deploy-sepolia.js` checked for a fixed 0.02 SepoliaETH, less than the setup can cost at the highest base fee it
+  accepts; it now requires 28 million gas at the highest fee it may pay (default maximum base fee 0.5 gwei).
 
 ### Measurements, scripts and data
 
@@ -82,8 +97,12 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   `measure-local.js`.
 - `results/did2_sepolia.jsonl` is now `results/sepolia_2026-07-21_n20.jsonl` (content unchanged);
   `results/README.md` replaces `results/sepolia_results.md` and describes every log.
-- Tests: 122 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3) and leak tests of
-  the Sepolia scripts.
+- `analyze-latency.js` also reports intervals over processes or blocks (whole clusters resampled), the medians of
+  the first and second halves of each, and headers that disagree; `measure-local.js` runs 100 warm-up verifications
+  per process (10 before) and records whether the checkout differs from its commit; `measure-sepolia.js` takes
+  `--timeout-ms` and records the commit. `requirements.txt` lists the Python packages.
+- Tests: 143 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3), leak tests of
+  the Sepolia scripts, and a check that the gas tables in the READMEs match the measurement.
 
 ## 1.0.0 (24 July 2026)
 

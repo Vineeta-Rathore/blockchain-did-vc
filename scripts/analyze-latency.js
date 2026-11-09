@@ -9,6 +9,11 @@
  *   - measure-local.js logs (rows with kind "local");
  *   - measure-sepolia.js logs (rows with kind "sepolia" and "cache_check").
  * Warm-up rows are excluded. Reads only the log; never contacts a network.
+ *
+ * Samples of one process (local) or one block (Sepolia) are not independent of each other, so besides the pooled
+ * statistics every summary gives the median of each process or block and an interval over them (whole processes or
+ * blocks resampled; stats.clusterBootstrapCI), and compares the first and second half of the timed iterations within
+ * each process or block (drift). Headers that disagree (commit, machine, versions) are reported as warnings.
  */
 const fs = require('fs');
 const path = require('path');
@@ -26,6 +31,56 @@ function groupBy(rows, key) {
     out.get(k).push(row);
   }
   return out;
+}
+
+// The median of each cluster and an interval over clusters (whole clusters resampled).
+function clusterSummary(rows, clusterKey) {
+  const groups = groupBy(rows, clusterKey);
+  return {
+    k: groups.size,
+    medians: Object.fromEntries([...groups].map(([g, rs]) => [g, S.median(rs.map((r) => r.total_ms))])),
+    bootstrap: S.clusterBootstrapCI([...groups.values()].map((rs) => rs.map((r) => r.total_ms)), S.median),
+  };
+}
+
+// First half against second half of the timed iterations of each cluster (equal halves; the middle iteration of an
+// odd count is left out). A warm-up that is too short shows as first halves that are slower in most clusters.
+function drift(rows, clusterKey) {
+  const first = [];
+  const second = [];
+  let clusters = 0;
+  let slowerFirst = 0;
+  for (const rs of groupBy(rows, clusterKey).values()) {
+    const x = [...rs].sort((a, b) => a.iteration - b.iteration).map((r) => r.total_ms);
+    const h = Math.floor(x.length / 2);
+    if (h < 1) continue;
+    const f = x.slice(0, h);
+    const s = x.slice(x.length - h);
+    first.push(...f);
+    second.push(...s);
+    clusters += 1;
+    if (S.median(f) > S.median(s)) slowerFirst += 1;
+  }
+  return clusters ? {
+    clusters, firstHalfMedian: S.median(first), secondHalfMedian: S.median(second), clustersSlowerFirst: slowerFirst,
+  } : null;
+}
+
+// Fields that must agree across the headers of one log; a repeated process index and a dirty checkout are reported.
+function headerWarnings(rows, fields) {
+  const headers = rows.filter((r) => r.kind === 'header');
+  const warnings = [];
+  for (const f of fields) {
+    const values = [...new Set(headers.map((h) => JSON.stringify(h[f] === undefined ? null : h[f])))];
+    if (values.length > 1) warnings.push(`headers differ in ${f}: ${values.join(', ')}`);
+  }
+  const indices = {};
+  for (const h of headers) if (h.processIndex !== undefined) indices[h.processIndex] = (indices[h.processIndex] || 0) + 1;
+  for (const [p, n] of Object.entries(indices)) if (n > 1) warnings.push(`process index ${p} appears in ${n} headers`);
+  if (headers.some((h) => typeof h.commit === 'string' && h.commit.endsWith('-dirty'))) {
+    warnings.push('a header records a dirty checkout (tracked files differ from the commit)');
+  }
+  return warnings;
 }
 
 const r1 = (v) => (v === null || v === undefined ? 'n/a' : Number(v).toFixed(1));
@@ -77,23 +132,30 @@ function analyzeLocal(rows) {
     const v = timed.filter((r) => r.steps && r.steps[name] !== undefined).map((r) => r.steps[name]);
     if (v.length) steps[name] = S.summary(v);
   }
-  const perProcess = {};
-  for (const [p, rs] of groupBy(timed, (r) => r.process)) perProcess[p] = S.median(rs.map((r) => r.total_ms));
+  const byProcess = (r) => r.process;
   const out = {
     log: 'measure-local.js (full verification pipeline, Hardhat in-process network)',
+    warnings: headerWarnings(rows, ['commit', 'cpu', 'cpuCount', 'node', 'hardhat', 'ethers', 'hardfork', 'solc', 'warmup', 'timed', 'powerScheme']),
     invalid: all.length - timed.length,
     total: S.summary(totals),
     steps,
-    perProcessMedian: perProcess,
+    clusters: clusterSummary(timed, byProcess),
+    drift: drift(timed, byProcess),
   };
   const t = out.total;
+  const c = out.clusters;
+  const d = out.drift;
   const lines = [
     out.log,
+    ...out.warnings.map((w) => `WARNING: ${w}`),
     `n = ${t.n} timed verifications (${out.invalid} not valid); median ${r2(t.median)} ms ` +
-      `[${r2(t.medianCI.lower)}, ${r2(t.medianCI.upper)}], Q1 ${r2(t.q1)}, Q3 ${r2(t.q3)}, p95 ${r2(t.p95)}, ` +
-      `mean ${r2(t.mean)}, min ${r2(t.min)}, max ${r2(t.max)} ms`,
+      `[${r2(t.medianCI.lower)}, ${r2(t.medianCI.upper)}] (rows taken as independent), Q1 ${r2(t.q1)}, Q3 ${r2(t.q3)}, ` +
+      `p95 ${r2(t.p95)}, mean ${r2(t.mean)}, min ${r2(t.min)}, max ${r2(t.max)} ms`,
+    `Over ${c.k} processes: per-process medians ${Object.entries(c.medians).map(([k, v]) => `${k}: ${r2(v)}`).join(', ')} ms; ` +
+      `interval for the median, processes resampled: [${r2(c.bootstrap.lower)}, ${r2(c.bootstrap.upper)}] ms (seed ${c.bootstrap.seed})`,
+    ...(d ? [`Drift: first-half median ${r2(d.firstHalfMedian)} ms, second-half ${r2(d.secondHalfMedian)} ms; ` +
+      `first half slower in ${d.clustersSlowerFirst} of ${d.clusters} processes`] : []),
     `Per-step medians (ms): ${Object.entries(steps).map(([k, v]) => `${k} ${v.median.toFixed(3)}`).join(', ')}`,
-    `Per-process medians (ms): ${Object.entries(perProcess).map(([k, v]) => `${k}: ${r2(v)}`).join(', ')}`,
   ];
   return { out, lines };
 }
@@ -143,33 +205,57 @@ function analyzeSepolia(rows) {
   const pMinusB0 = p.map((r) => r.total_ms - r.b0_ms);
   const s = (byMode.get('S') || []).filter((r) => Array.isArray(r.reads_ms) && Number.isFinite(r.reads_ms[0]));
   const sThreeReads = s.map((r) => r.total_ms - r.reads_ms[0]);
-  const key = (r) => `${r.block}:${r.iteration}`;
-  // Pairs only iterations in which both modes succeeded.
+  // One cluster per block of one run: a block run again (a reserve slot, or a second process) is its own cluster, and
+  // its rows never pair with those of the first.
+  const byBlock = (r) => `${r.run || ''}|${r.block}${r.reserve ? '|reserve' : ''}`;
+  const key = (r) => `${byBlock(r)}|${r.iteration}`;
+  // Pairs only iterations in which both modes succeeded; the interval resamples whole blocks.
   const pairs = (a, b) => {
     const mb = new Map((byMode.get(b) || []).map((r) => [key(r), r]));
     const left = [];
     const right = [];
+    const ratios = new Map();
     for (const r of byMode.get(a) || []) {
-      if (mb.has(key(r))) {
-        left.push(r.total_ms);
-        right.push(mb.get(key(r)).total_ms);
-      }
+      const other = mb.get(key(r));
+      if (!other) continue;
+      left.push(r.total_ms);
+      right.push(other.total_ms);
+      if (!ratios.has(byBlock(r))) ratios.set(byBlock(r), []);
+      ratios.get(byBlock(r)).push(r.total_ms / other.total_ms);
     }
-    return left.length ? S.pairedRatio(left, right) : null;
+    if (!left.length) return null;
+    return { ...S.pairedRatio(left, right), blockBootstrap: S.clusterBootstrapCI([...ratios.values()], S.median) };
   };
   const perBlock = {};
-  for (const [blk, rs] of groupBy(timed, (r) => r.block)) {
+  for (const [blk, rs] of groupBy(timed, (r) => `${r.block}${r.reserve ? ' (reserve)' : ''}`)) {
     perBlock[blk] = Object.fromEntries([...groupBy(rs, (r) => r.mode)].map(([m, x]) => [m, S.median(x.map((r) => r.total_ms))]));
+  }
+  // Rows whose timer included a new connection (DNS, TCP, TLS), by mode and order; they stay in the statistics.
+  const newSockets = {};
+  for (const r of timed.filter((x) => (x.newSocketsDuringTimer || 0) > 0)) {
+    const m = newSockets[r.mode] || (newSockets[r.mode] = {});
+    m[r.order] = (m[r.order] || 0) + 1;
+  }
+  const clusters = {};
+  const driftByMode = {};
+  for (const [mode, rs] of byMode) {
+    clusters[mode] = clusterSummary(rs, byBlock);
+    driftByMode[mode] = drift(rs, byBlock);
   }
   const cold = rows.filter((r) => r.kind === 'sepolia' && r.coldStart && !r.pilot).map((r) => r.cold_ms).filter(Number.isFinite);
   const cache = rows.filter((r) => r.kind === 'cache_check' && Number.isFinite(r.fresh_ms) && Number.isFinite(r.known_ms));
   const out = {
     log: 'measure-sepolia.js (Sepolia; P = full pipeline, S = four reads in sequence, C = concurrent, Bt = one batch)',
+    warnings: headerWarnings(rows.filter((r) => r.kind !== 'header' || r.label !== 'pilot'),
+      ['commit', 'node', 'ethers', 'provider', 'chainId', 'contract', 'credentialB', 'blockLag', 'requestTimeoutMs', 'agents']),
     invalid: runRows.filter((r) => r.mode === 'P' && !r.valid).length,
     excluded,
     pilotRowsIgnored,
     requestAnomalies,
+    newSockets,
     modes,
+    clusters,
+    drift: driftByMode,
     P_minus_B0: pMinusB0.length ? S.summary(pMinusB0) : null,
     S_threeReads_derived: sThreeReads.length ? S.summary(sThreeReads) : null,
     speedup_S_over_C: pairs('S', 'C'),
@@ -187,17 +273,26 @@ function analyzeSepolia(rows) {
     lines.push(`${m}: ${e.n} row(s) excluded (${Object.entries(e.codes).map(([c, n]) => `${c} ${n}`).join(', ')})`);
   }
   if (pilotRowsIgnored) lines.push(`pilot rows ignored: ${pilotRowsIgnored}`);
+  for (const w of out.warnings) lines.unshift(`WARNING: ${w}`);
   for (const [m, n] of Object.entries(requestAnomalies)) lines.push(`${m}: ${n} row(s) with unexpected request counts or a chain-ID request`);
+  for (const [m, byOrder] of Object.entries(newSockets)) {
+    lines.push(`${m}: rows whose timer opened a new connection, by order: ${Object.entries(byOrder).map(([o, n]) => `${o} ${n}`).join('; ')}`);
+  }
   for (const [m, v] of Object.entries(modes)) {
-    lines.push(`${m}: n = ${v.n}, median ${r1(v.median)} ms [${r1(v.medianCI.lower)}, ${r1(v.medianCI.upper)}], ` +
-      `Q1 ${r1(v.q1)}, Q3 ${r1(v.q3)}, p95 ${r1(v.p95)}, max ${r1(v.max)}`);
+    const c = clusters[m];
+    const d = driftByMode[m];
+    lines.push(`${m}: n = ${v.n}, median ${r1(v.median)} ms [${r1(v.medianCI.lower)}, ${r1(v.medianCI.upper)}] (rows taken as ` +
+      `independent), over ${c.k} blocks [${r1(c.bootstrap.lower)}, ${r1(c.bootstrap.upper)}] (blocks resampled), ` +
+      `Q1 ${r1(v.q1)}, Q3 ${r1(v.q3)}, p95 ${r1(v.p95)}, max ${r1(v.max)}` +
+      (d ? `; first/second half ${r1(d.firstHalfMedian)}/${r1(d.secondHalfMedian)} ms, first slower in ${d.clustersSlowerFirst} of ${d.clusters} blocks` : ''));
   }
   if (out.P_minus_B0) lines.push(`P without B0: median ${r1(out.P_minus_B0.median)} ms`);
   if (out.S_threeReads_derived) lines.push(`S without its V2 read (derived three-read figure): median ${r1(out.S_threeReads_derived.median)} ms`);
   for (const [name, v] of [['S/C', out.speedup_S_over_C], ['S/Bt', out.speedup_S_over_Bt]]) {
     if (v) {
       lines.push(`${name} paired speed-up (n = ${v.n}): median ${r2(v.medianOfRatios)} [${r2(v.bootstrap.lower)}, ${r2(v.bootstrap.upper)}] ` +
-        `(seed ${v.bootstrap.seed}), range ${r2(v.min)}-${r2(v.max)}, ratio of medians ${r2(v.ratioOfMedians)}`);
+        `(pairs resampled), [${r2(v.blockBootstrap.lower)}, ${r2(v.blockBootstrap.upper)}] (blocks resampled; seed ${v.bootstrap.seed}), ` +
+        `range ${r2(v.min)}-${r2(v.max)}, ratio of medians ${r2(v.ratioOfMedians)}`);
     }
   }
   if (out.cacheCheck) {

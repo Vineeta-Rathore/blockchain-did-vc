@@ -1,12 +1,14 @@
 /**
  * Local verification latency: the full verification pipeline against the Hardhat in-process network.
- * One process = 10 warm-up and 20 timed verifications of one valid credential; run it five times as separate
+ * One process = 100 warm-up and 20 timed verifications of one valid credential; run it five times as separate
  * processes for n = 100. Every timed and warm-up row is appended to the log (warm-up rows are flagged).
  *
  *   LOCAL_LOG=results/local_<date>_n100.jsonl PROCESS_INDEX=1 npx hardhat run scripts/measure-local.js
  *
  * The client uses a fixed network (no chain-ID request before each call). Per-step times (B0, V1-V8) are recorded
- * when the verifier supports them (version 1.1.0); on version 1.0.0 only the totals are recorded.
+ * when the verifier supports them (version 1.1.0). The script also runs on a version 1.0.0 checkout with
+ * scripts/lib/fixtures.js copied next to it (the R1-code run): that verifier has no per-step times and no
+ * checkedAtBlock, so only the totals are recorded. For that reason the script needs nothing else from scripts/lib.
  */
 const fs = require('fs');
 const os = require('os');
@@ -17,8 +19,9 @@ const { VerifiableCredentialService } = require('../src/vc/vc-service');
 const { CredentialVerifierService } = require('../src/vc/verifier-service');
 const { didDocumentInputs, randomDidId } = require('./lib/fixtures');
 
-const WARMUP = 10;
+const WARMUP = 100;
 const TIMED = 20;
+// The same list as scripts/lib/rpc.js, kept here so that the script needs no other file (see above).
 const BANNED = ['secretKeyMultibase', 'privateKeyMultibase', 'z3u2'];
 
 // ethers v5 re-detects the network (eth_chainId) before calls unless the provider caches it, as
@@ -45,7 +48,8 @@ function header(processIndex) {
     script: 'measure-local.js',
     processIndex,
     startedAt: new Date().toISOString(),
-    commit: safeExec('git', ['rev-parse', '--short', 'HEAD']),
+    // "-dirty" if tracked files differ from the commit
+    commit: safeExec('git', ['describe', '--always', '--dirty', '--abbrev=12']),
     node: process.version,
     hardhat: require('hardhat/package.json').version,
     ethers: ethers.version,
@@ -106,6 +110,7 @@ async function main() {
       reason: result.reason,
       total_ms: totalMs,
       ...(result.timings ? { steps: result.timings } : {}),
+      // version 1.0.0's verifier reports no block
       ...(result.checkedAtBlock !== undefined ? { block: result.checkedAtBlock } : {}),
     });
   }

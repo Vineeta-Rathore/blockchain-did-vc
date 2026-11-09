@@ -4,7 +4,10 @@
 // - Errors are reduced to codes; error.message, error.url, error.body and error.stack are never written.
 // - Requests are never retried (throttleLimit 1); the network is fixed, so no eth_chainId is sent before calls.
 const fs = require('fs');
+const http = require('http');
+const https = require('https');
 const { ethers } = require('ethers');
+const { errorCode } = require('../../src/vc/verifier-service');
 
 const SEPOLIA = { name: 'sepolia', chainId: 11155111 };
 const BANNED = ['secretKeyMultibase', 'privateKeyMultibase', 'z3u2'];
@@ -91,12 +94,32 @@ function providerLabel(url) {
   }
 }
 
-function errorCode(error) {
-  const code = error && error.code;
-  if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(code)) return code;
-  if (typeof code === 'number' && Number.isInteger(code)) return `RPC_${code}`;
-  if (error && Number.isInteger(error.status)) return `HTTP_${error.status}`;
-  return 'UNKNOWN_ERROR';
+// ethers v5 sends every request through Node's global agents (it passes no agent). Node 22's defaults keep a socket
+// for only 5 s after its last use and reuse the most recent one first, so the extra sockets that a concurrent mode
+// opens close between its iterations and it would time new connections (DNS, TCP, TLS) in some orders and not in
+// others. These agents keep sockets for 10 minutes and use them in turn; every new socket is counted, so that a row
+// whose timer includes one can be reported.
+function installAgents({ idleTimeoutMs = 600000 } = {}) {
+  const previous = { http: http.globalAgent, https: https.globalAgent };
+  const stats = { newSockets: 0, idleTimeoutMs };
+  const agents = [];
+  for (const [name, mod] of [['http', http], ['https', https]]) {
+    const agent = new mod.Agent({ keepAlive: true, timeout: idleTimeoutMs, scheduling: 'fifo' });
+    const create = agent.createConnection.bind(agent);
+    agent.createConnection = (...args) => {
+      stats.newSockets += 1;
+      return create(...args);
+    };
+    mod.globalAgent = agent;
+    agents.push([name, mod, agent]);
+  }
+  stats.restore = () => {
+    for (const [name, mod, agent] of agents) {
+      agent.destroy();
+      mod.globalAgent = previous[name];
+    }
+  };
+  return stats;
 }
 
 function connectionInfo(url, timeoutMs = 30000) {
@@ -175,6 +198,7 @@ function scanText(text, secrets) {
 }
 
 module.exports = {
+  installAgents,
   BANNED,
   SEPOLIA,
   connectionInfo,

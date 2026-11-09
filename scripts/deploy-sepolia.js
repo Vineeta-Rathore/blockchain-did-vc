@@ -17,7 +17,7 @@
  *   npx hardhat compile
  *   node scripts/deploy-sepolia.js --key <deployer key file> --env <file with SEPOLIA_RPC_URL>
  *        [--out results/sepolia_v1.1_deployment.json] [--secrets-dir <dir outside any git tree>]
- *        [--tip-gwei 0.01] [--max-base-fee-gwei 1] [--wait-timeout-s 600] [--resend]
+ *        [--tip-gwei 0.01] [--max-base-fee-gwei 0.5] [--wait-timeout-s 600] [--resend]
  *
  * --resend signs a pending step again, with the same nonce and the current fees (to replace a stuck transaction);
  * whichever of the two is mined is recorded. The issuer's private key is written once to <secrets-dir>/issuer_v1.1.json and never printed; it is
@@ -34,7 +34,9 @@ const R = require('./lib/rpc');
 const { VerifiableCredentialService } = require('../src/vc/vc-service');
 const { didDocumentInputs, randomCredentialId, randomDidId } = require('./lib/fixtures');
 
-const MIN_BALANCE = ethers.utils.parseEther('0.02');
+// Gas of the four setup transactions under Sepolia's schedule (deployment 21.19 M, createDID 3.12 M and 2.25 M,
+// revokeCredential 0.14 M; results/README.md), rounded up.
+const GAS_BUDGET = 28000000;
 const REASON_PRIVILEGE_WITHDRAWN = 9;
 const ALLOWED_CHAINS = new Set([R.SEPOLIA.chainId, 1337, 31337]);
 
@@ -47,13 +49,16 @@ function arg(name, fallback = null) {
 const flag = (name) => process.argv.includes(name);
 
 // Fees are set explicitly. Without overrides, ethers v5 adds a fixed 1.5 gwei priority fee; under the gas schedule
-// Sepolia has used since 6 Oct 2026 the setup uses about 28 million gas, which at that tip would cost about
+// Sepolia has used since 6 Oct 2026 the setup uses about 27 million gas, which at that tip would cost about
 // 0.04 SepoliaETH. Default: a 0.01 gwei tip and maxFeePerGas = 2 x the latest base fee + tip. The script stops,
-// before sending, if the base fee is above --max-base-fee-gwei (default 1), so that a fee spike cannot drain the key.
+// before sending, if the base fee is above --max-base-fee-gwei (default 0.5), so that a fee spike cannot drain the
+// key. A fresh run needs a balance of GAS_BUDGET x (2 x the maximum base fee + tip), so that it cannot stop partway
+// for want of funds while the base fee stays below the maximum (0.0283 SepoliaETH with the defaults).
 function feePolicy() {
   const tip = ethers.utils.parseUnits(arg('--tip-gwei', '0.01'), 'gwei');
-  const maxBase = ethers.utils.parseUnits(arg('--max-base-fee-gwei', '1'), 'gwei');
+  const maxBase = ethers.utils.parseUnits(arg('--max-base-fee-gwei', '0.5'), 'gwei');
   return {
+    minBalance: maxBase.mul(2).add(tip).mul(GAS_BUDGET),
     describe: { tipGwei: ethers.utils.formatUnits(tip, 'gwei'), maxBaseFeeGwei: ethers.utils.formatUnits(maxBase, 'gwei'),
       maxFeePerGas: '2 x latest base fee + tip' },
     overrides: async (provider) => {
@@ -250,7 +255,7 @@ async function main() {
     if (code.toLowerCase() !== artifact.deployedBytecode.toLowerCase()) throw fail('BYTECODE_MISMATCH');
     return true;
   };
-  if (!state.txs.deploy && !state.pending.deploy && balance.lt(MIN_BALANCE)) throw fail('BALANCE_TOO_LOW');
+  if (!state.txs.deploy && !state.pending.deploy && balance.lt(fees.minBalance)) throw fail('BALANCE_TOO_LOW');
   const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode, wallet);
   await step('deploy', codeMatches,
     (overrides) => factory.getDeployTransaction(overrides),

@@ -44,7 +44,8 @@ does not reproduce its bytecode; its interface is the version 1.0.0 ABI ([`resul
 - Node.js 20 or later (Hardhat's simulator, EDR, needs it) and npm. Tested with Node.js 22.10.0 and npm 10.9.0 on
   Windows 11.
 - Python 3 with numpy, only for `scripts/check_stats_numpy.py`, and with matplotlib, only for
-  `scripts/plot-latency.py` (tested with Python 3.12 and matplotlib 3.10.5).
+  `scripts/plot-latency.py`: `python3 -m pip install -r requirements.txt` (numpy 1.26.2, matplotlib 3.10.5; tested
+  with Python 3.12.2). On Windows the command is `python` or `py -3`; the commands below write `python3`.
 - For the Sepolia scripts only: an Ethereum Sepolia JSON-RPC endpoint; for `deploy-sepolia.js` also a funded Sepolia
   test key (never a key that holds real funds).
 
@@ -53,12 +54,16 @@ does not reproduce its bytecode; its interface is the version 1.0.0 ABI ([`resul
 ```bash
 npm ci                 # install the locked toolchain (Hardhat 2.29.0, ethers 5.8.0)
 npx hardhat compile    # solc 0.8.19, optimiser on, 200 runs
-npm test               # 122 tests
+npm test               # 143 tests
 npm run measure-gas    # gas of each operation, on the osaka schedule and on Sepolia's
 ```
 
-`npm test` runs six suites: the registry (46 tests), credentials and verification (50), leak tests (14), the RPC
-helpers' secret handling (6), the latency analysis (4) and the gas model (2). The leak tests run every measurement mode, and both Sepolia
+Run every command from the repository root. `npm ci` installs exactly the versions in `package-lock.json`;
+`npm install` may resolve newer ones. Outside the repository, `npx hardhat` offers to download another Hardhat
+version instead of using this one.
+
+`npm test` runs seven suites: the registry (58 tests), credentials and verification (50), leak tests (14), the RPC
+helpers' secret handling (6), the measurement harness (8), the latency analysis (4) and the gas model (3). The leak tests run every measurement mode, and both Sepolia
 scripts as child processes, against a local fake server that fails requests in eight ways, and check the raw rows,
 output, logs and records for the fake token, the URL path and the fake deployer key, and that no request is retried.
 
@@ -94,13 +99,21 @@ results/
 ## The registry
 
 `contracts/DIDRegistry.sol` stores each DID document on chain: its identifier, controller address, verification
-methods, authentication methods, services, creation and update times, an `active` flag, a hash of the full document
-and a nonce. The controller of a DID can update the document, rotate a key, change the controller, add or remove
-delegates, set attributes, deactivate and reactivate the DID, and revoke credentials that the DID issued.
+methods, services, creation and update times, an `active` flag, a hash of the full document and a nonce.
+`getDIDDocument` also returns authentication methods, which are always the verification methods and are not stored a
+second time. The controller of a DID can update the document, rotate a key, hand the DID to another address, add or
+remove delegates, set attributes, deactivate and reactivate the DID, and revoke credentials that the DID issued.
+
+A handover takes two steps. `changeController(did, newAddress)` records a proposal (event `ControllerChangeProposed`);
+control moves only when that address calls `acceptController(did)` (event `ControllerChanged`). Until then the
+current controller keeps full control, can replace the proposal with another, or withdraw it with
+`cancelControllerChange(did)` (event `ControllerChangeCancelled`). `getPendingController(did)` returns the proposed
+address. Deactivating the DID withdraws a pending proposal, so it cannot be accepted after reactivation.
 
 Revocation is keyed by the issuer DID and the credential ID: `revokeCredential(issuerDid, credentialId, reasonCode)`
 can be called only by the controller of `issuerDid`, and a revocation is final. The entry stores the time and a reason
-code from RFC 5280, section 5.3.1:
+code from RFC 5280, section 5.3.1, in one storage slot; `getRevocationEntry` returns the credential ID it was asked
+about, which is the key of the entry and is not stored again:
 
 | Code | Meaning | Accepted |
 |---|---|---|
@@ -123,14 +136,15 @@ registry stores.
 Administration. The deploying account becomes `owner` and the first administrator. Administrators can add and remove
 administrators (not the owner) and pause or unpause the registry; each of these actions emits an event (`AdminAdded`,
 `AdminRemoved`, `Paused`, `Unpaused`). While the registry is paused, `createDID`, `updateDID`, `reactivateDID`,
-`changeController`, `rotateKey`, `addDelegate`, `removeDelegate` and `setAttribute` revert; `revokeCredential`,
-`deactivateDID` and every read function keep working, so a pause cannot stop an issuer from revoking or a controller
-from deactivating a DID. No administrator function changes, revokes or deactivates another controller's DID or
+`changeController`, `acceptController`, `rotateKey`, `addDelegate`, `removeDelegate` and `setAttribute` revert;
+`revokeCredential`, `deactivateDID`, `cancelControllerChange` and every read function keep working, so a pause cannot
+stop an issuer from revoking, a controller from deactivating a DID, or a controller from withdrawing a handover
+proposal before the registry is unpaused. No administrator function changes, revokes or deactivates another controller's DID or
 credentials. The contract has no upgrade mechanism and no function that transfers ownership.
 
 A deactivated DID can still have a key rotated or its document updated (to repair it before reactivation); it stays
-deactivated until its controller reactivates it. A key rotation also replaces the old key in the authentication
-methods, and `updateDID` sets the authentication methods to the new verification methods.
+deactivated until its controller reactivates it. As the authentication methods are the verification methods, a key
+rotation or an update changes both.
 
 ## Issuing and verifying credentials
 
@@ -184,14 +198,16 @@ verification method (the issuer's also one service entry):
 
 | Operation | osaka (Hardhat) | Glamsterdam (Sepolia) | New storage slots |
 |---|---|---|---|
-| Deployment (12,581 bytes of code) | 2,816,124 | 19,881,858 | 2 |
-| `createDID`, a controller's first DID | 863,141 | 4,111,181 | 37 |
-| `createDID`, a controller's second DID | 689,311 | 3,240,891 | 29 |
-| `revokeCredential` (45-character credential ID, reason code 9) | 145,713 | 579,513 | 5 |
+| Deployment (13,430 bytes of code) | 2,999,747 | 21,194,807 | 2 |
+| `createDID`, a controller's first DID | 662,928 | 3,119,488 | 28 |
+| `createDID`, a controller's second DID | 489,098 | 2,249,198 | 20 |
+| `revokeCredential` (45-character credential ID, reason code 9) | 56,765 | 138,785 | 1 |
 
 The Glamsterdam column is computed by `scripts/lib/gas-schedule.js` from the storage writes of each local
-transaction. It matched the gas that Sepolia reported for the same calls (`eth_simulateV1`, 8 and 9 November 2026)
-exactly; `test/GasSchedule.test.js` checks this. The three EIPs were in Last Call at that date and may still change
+transaction. It matched the gas that Sepolia reported for the same calls (`eth_simulateV1`, 9 November 2026)
+exactly; `test/GasSchedule.test.js` checks this, and that the tables in this file and in `results/README.md` carry the
+measured values. Most of the gas is spent on new storage slots, so the registry stores nothing twice; the delegation
+and attribute functions, which grant no permission (see Limits), still add to the code and so to the deployment gas. The three EIPs were in Last Call at that date and may still change
 before they reach mainnet. The gas of the actual Sepolia deployment is in `results/sepolia_v1.1_deployment.json`
 (to be added).
 
@@ -204,18 +220,28 @@ before they reach mainnet. The gas of the actual Sepolia deployment is in `resul
 | Gas for the deployment's own inputs | `GAS_INPUTS=results/sepolia_v1.1_deployment.json npx hardhat run scripts/measure-gas.js` | console (JSON) |
 | Local verification latency | five runs of `LOCAL_LOG=results/local_<date>_n100.jsonl PROCESS_INDEX=<k> npx hardhat run scripts/measure-local.js`, k = 1 to 5, then `node scripts/analyze-latency.js <log>` | `results/local_<date>_n100.jsonl` (to be added) |
 | Sepolia verification latency | `node scripts/measure-sepolia.js --deployment results/sepolia_v1.1_deployment.json --log <log> --env <file>`, then `node scripts/analyze-latency.js <log>` | `results/sepolia_<date>_n100.jsonl` (to be added) |
-| Latency figure | `python scripts/plot-latency.py <local log>` | (to be added) |
+| Latency figure | `python3 scripts/plot-latency.py <local log>` | (to be added) |
 | July 2026 figures (version 1.0.0) | `node scripts/analyze-latency.js results/sepolia_2026-07-21_n20.jsonl` | `results/sepolia_2026-07-21_n20.jsonl` |
-| Statistics against numpy | `python scripts/check_stats_numpy.py` | console |
+| Statistics against numpy | `python3 scripts/check_stats_numpy.py` | console |
 
 On Windows PowerShell, set the variables first: `$env:LOCAL_LOG = "results/local_<date>_n100.jsonl";
-$env:PROCESS_INDEX = "1"; npx hardhat run scripts/measure-local.js`.
+$env:PROCESS_INDEX = "1"; npx hardhat run scripts/measure-local.js`. Variables set this way stay set for the whole
+PowerShell session: remove them afterwards (`Remove-Item Env:LOCAL_LOG, Env:PROCESS_INDEX, Env:GAS_INPUTS`), because
+a leftover `GAS_INPUTS` switches `npm run measure-gas` to replay mode and a leftover `PROCESS_INDEX` repeats a
+process index (which `analyze-latency.js` reports).
 
 `analyze-latency.js` counts only measurements that succeeded (a valid verification, or reads with a time, no error
-and the expected answers) and leaves out pilot rows; it reports the rows it left out, by mode and error code, and rows
-with unexpected request counts. `scripts/lib/stats.js` defines every statistic once: the conventional median, quartiles by the Hyndman and Fan type 7
+and the expected answers) and leaves out pilot rows; it reports the rows it left out, by mode and error code, rows
+with unexpected request counts, and rows whose timer included a new connection, by mode and order. Measurements of
+one process (local) or one block (Sepolia) are not independent, so it also gives the median of each process or block,
+an interval for the median that resamples whole processes or blocks, the same for the paired speed-ups, and the
+medians of the first and second halves of each process or block (a check that the warm-up was long enough). With
+five processes or ten blocks there are few clusters to resample, so that interval is approximate and can be too
+narrow; the median of every process or block is printed with it, and their spread is the more direct evidence. It warns
+when the headers of one log disagree (commit, machine, versions), when a process index repeats, and when a header
+records a checkout that differs from its commit. `scripts/lib/stats.js` defines every statistic once: the conventional median, quartiles by the Hyndman and Fan type 7
 rule, the nearest-rank 95th percentile, an order-statistic confidence interval for the median, and a seeded percentile
-bootstrap for paired speed-ups only. Each log, and what produced it, is described in
+bootstrap for paired speed-ups, and a bootstrap that resamples whole processes or blocks. Each log, and what produced it, is described in
 [`results/README.md`](results/README.md).
 
 ## Sepolia scripts and secrets
@@ -224,9 +250,13 @@ The two Sepolia scripts run with plain Node, not through Hardhat, and no Hardhat
 
 - `measure-sepolia.js` is read-only: no signer, no transaction. It times the full verification (mode P) and the four
   contract reads sent in sequence (S), concurrently (C) and as one JSON-RPC batch (Bt), in a rotating order, at ten
-  fixed times of day (machine local time). Warm-up and timed iterations rotate through the four mode orders
-  separately, so the 100 timed iterations use each order 25 times. A block that cannot start within two minutes of its
-  time, also after the machine slept, is logged as missed. `--pilot` runs three labelled iterations.
+  fixed times of day (machine local time). The order of the four modes depends only on the block and the iteration,
+  so the 100 timed iterations use each order 25 times, and a block run on its own (a reserve slot) keeps its orders.
+  A block that cannot start within two minutes of its time, also after the machine slept, is logged as missed.
+  `--pilot` runs three labelled iterations. Sockets stay open between requests for up to 10 minutes and are reused in
+  turn (Node's default agent closes them after 5 s and always reuses the most recent one, so the extra connections
+  of the concurrent mode would be set up again inside its timer in some orders); every row records the new sockets
+  opened inside its timer. Each row carries the run's start time, and the header the commit (`git describe --dirty`).
 - `deploy-sepolia.js` deploys the contract, registers an issuer DID and a subject DID with fresh Ed25519 keys, signs
   two credentials and revokes one of them with reason code 9. Each step's nonce is saved in the record first; each
   transaction is then signed, and its hash and raw form are saved before it is broadcast. A re-run looks for a receipt
@@ -238,7 +268,8 @@ The two Sepolia scripts run with plain Node, not through Hardhat, and no Hardhat
   DID is controlled by another address, or if the issuer key no longer matches the recorded inputs. Only Sepolia and
   local Hardhat chains are accepted. It sets fees explicitly (a 0.01 gwei priority fee and a
   maximum fee of twice the latest base fee plus that tip; `--tip-gwei`) and stops before sending if the base fee is
-  above 1 gwei (`--max-base-fee-gwei`).
+  above 0.5 gwei (`--max-base-fee-gwei`). A fresh run needs 28 million gas times the highest fee it may pay (0.0283
+  SepoliaETH with the defaults), so it cannot run out of funds partway.
 
 How secrets are handled:
 
@@ -264,7 +295,7 @@ How secrets are handled:
 - `did:smid` is this artifact's method name. It has no method specification and is not in the W3C list of DID methods,
   and no DID resolver driver exists for it.
 - A DID name proves nothing by itself. `createDID` registers any unused name for whoever calls it first, and
-  `changeController` hands a DID to another address in one step, without that address's consent. `VALID` means that
+  a handover needs the new address's acceptance but no other check. `VALID` means that
   the credential was signed with a key in the document of an active registered DID; which issuer DIDs to trust is the
   relying party's decision, outside the verifier.
 - The registry has no `assertionMethod` relationship: any verification method of the issuer's document can sign

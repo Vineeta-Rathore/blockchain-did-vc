@@ -19,8 +19,11 @@
  *        [--out results/sepolia_v1.1_deployment.json] [--secrets-dir <dir outside any git tree>]
  *        [--tip-gwei 0.01] [--max-base-fee-gwei 0.5] [--wait-timeout-s 600] [--resend]
  *
- * --resend signs a pending step again, with the same nonce and the current fees (to replace a stuck transaction);
- * whichever of the two is mined is recorded. The issuer's private key is written once to <secrets-dir>/issuer_v1.1.json and never printed; it is
+ * --resend signs a pending step again with the same nonce (to replace a stuck transaction), at the current fees or
+ * 12.5% above the last signed transaction's, whichever is higher, but never above 2 x the maximum base fee + tip
+ * (FEE_CAP_REACHED); whichever transaction is mined is recorded, with its own fees. A step whose nonce was saved but
+ * whose transaction was never signed (the run stopped before, for example on BASE_FEE_TOO_HIGH) is signed on a plain
+ * re-run. The issuer's private key is written once to <secrets-dir>/issuer_v1.1.json and never printed; it is
  * needed only until the credentials are signed, and is deleted after the deployment gate. The subject's private key
  * is never stored. The record written to --out holds no secret. The key file and the secrets directory must lie
  * outside every git working tree. --expect-chain accepts only Sepolia (the default) and local Hardhat chains.
@@ -50,11 +53,19 @@ const fail = (code) => Object.assign(new Error(code), { code });
 // before sending, if the base fee is above --max-base-fee-gwei (default 0.5), so that a fee spike cannot drain the
 // key. A fresh run needs a balance of GAS_BUDGET x (2 x the maximum base fee + tip), so that it cannot stop partway
 // for want of funds while the base fee stays below the maximum (0.0283 SepoliaETH with the defaults).
+const GWEI = /^\d+(\.\d{1,9})?$/;
+
 function feePolicy() {
-  const tip = ethers.utils.parseUnits(arg('--tip-gwei', '0.01'), 'gwei');
-  const maxBase = ethers.utils.parseUnits(arg('--max-base-fee-gwei', '0.5'), 'gwei');
+  const tipText = arg('--tip-gwei', '0.01');
+  const maxBaseText = arg('--max-base-fee-gwei', '0.5');
+  if (!GWEI.test(tipText)) throw fail('ARG_TIP');
+  if (!GWEI.test(maxBaseText) || Number(maxBaseText) <= 0) throw fail('ARG_MAX_BASE_FEE');
+  const tip = ethers.utils.parseUnits(tipText, 'gwei');
+  const maxBase = ethers.utils.parseUnits(maxBaseText, 'gwei');
   return {
     minBalance: maxBase.mul(2).add(tip).mul(GAS_BUDGET),
+    // The highest maxFeePerGas the policy allows, also for replacements.
+    ceiling: maxBase.mul(2).add(tip),
     describe: { tipGwei: ethers.utils.formatUnits(tip, 'gwei'), maxBaseFeeGwei: ethers.utils.formatUnits(maxBase, 'gwei'),
       maxFeePerGas: '2 x latest base fee + tip' },
     overrides: async (provider) => {
@@ -87,7 +98,9 @@ async function main() {
   const keyFile = arg('--key');
   const outPath = arg('--out', 'results/sepolia_v1.1_deployment.json');
   const secretsDir = arg('--secrets-dir', path.join(os.homedir(), '.blockchain-did-vc-secrets'));
-  const waitTimeoutMs = Number(arg('--wait-timeout-s', '600')) * 1000;
+  const waitText = arg('--wait-timeout-s', '600');
+  if (!/^[1-9]\d{0,5}$/.test(waitText || '')) throw fail('ARG_WAIT_TIMEOUT');
+  const waitTimeoutMs = Number(waitText) * 1000;
   if (!url) throw fail('SEPOLIA_RPC_URL_MISSING');
   if (!keyFile) throw fail('KEY_FILE_MISSING');
   const expectedChain = Number(arg('--expect-chain', String(R.SEPOLIA.chainId)));
@@ -160,7 +173,7 @@ async function main() {
     const pending = state.pending[name];
     const entry = { hash: receipt.transactionHash, nonce: pending.nonce, block: receipt.blockNumber,
       gasUsed: receipt.gasUsed.toNumber(), effectiveGasPrice: receipt.effectiveGasPrice ? receipt.effectiveGasPrice.toString() : null,
-      status: receipt.status, fees: pending.fees };
+      status: receipt.status, fees: (pending.feesByHash || {})[receipt.transactionHash] || pending.fees };
     delete state.pending[name];
     if (receipt.status !== 1) {
       // A failed transaction used its nonce; the step starts again with a new one on the next run.
@@ -219,7 +232,8 @@ async function main() {
         }
         throw fail('NONCE_USED_ELSEWHERE');
       }
-      if (!flag('--resend')) {
+      // A step with a saved nonce but no signed transaction (the run stopped before signing) is signed below.
+      if (!flag('--resend') && pending.hashes.length) {
         await broadcast(pending.raw[pending.raw.length - 1], true);
         say(`${name}: waiting for ${pending.hashes[pending.hashes.length - 1]}, nonce ${pending.nonce}`);
         return waitAny(name, isDone);
@@ -239,6 +253,7 @@ async function main() {
       const max = (a, b) => (a.gt(b) ? a : b);
       overrides.maxFeePerGas = max(overrides.maxFeePerGas, bumped(pending.fees.maxFeePerGas));
       overrides.maxPriorityFeePerGas = max(overrides.maxPriorityFeePerGas, bumped(pending.fees.maxPriorityFeePerGas));
+      if (overrides.maxFeePerGas.gt(fees.ceiling)) throw fail('FEE_CAP_REACHED');
     }
     const request = await wallet.populateTransaction(await buildTx({ ...overrides, nonce: pending.nonce }));
     const signed = await wallet.signTransaction(request);
@@ -247,6 +262,7 @@ async function main() {
     pending.raw.push(signed);
     pending.fees = { maxPriorityFeePerGas: request.maxPriorityFeePerGas.toString(), maxFeePerGas: request.maxFeePerGas.toString(),
       gasLimit: request.gasLimit.toString() };
+    pending.feesByHash = { ...(pending.feesByHash || {}), [hash]: pending.fees };
     save();
     await broadcast(signed, false);
     say(`${name}: sent ${hash}, nonce ${pending.nonce}`);
@@ -348,6 +364,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  process.stderr.write(`deploy-sepolia failed: ${R.errorCode(error)}\n`);
-  process.exit(1);
+  // Both streams are flushed before exiting (pipes can be asynchronous).
+  process.stderr.write(`deploy-sepolia failed: ${R.errorCode(error)}\n`,
+    () => process.stdout.write('', () => process.exit(1)));
 });

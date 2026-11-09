@@ -122,6 +122,9 @@ describe('harness: connections, mode order, intervals and arguments', function (
             const err = (id) => ({ jsonrpc: '2.0', id, error: { code: -32000, message: 'header not found' } });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(Array.isArray(parsed) ? parsed.map((r) => err(r.id)) : err(parsed.id)));
+          } else if (behaviour === '429-retry-after') {
+            res.writeHead(429, { 'Content-Type': 'text/plain', 'Retry-After': '5' });
+            res.end('slow down');
           } else {
             res.writeHead(Number(behaviour), { 'Content-Type': 'text/plain' });
             res.end('failure');
@@ -134,12 +137,12 @@ describe('harness: connections, mode order, intervals and arguments', function (
     }
 
     for (const [behaviour, must, mustNot] of [['block', 'BLOCK_UNAVAILABLE', 'HTTP_'], ['429', 'HTTP_429', 'BLOCK_UNAVAILABLE'],
-      ['500', 'HTTP_500', 'BLOCK_UNAVAILABLE']]) {
+      ['429-retry-after', 'HTTP_429', 'TIMEOUT'], ['500', 'HTTP_500', 'BLOCK_UNAVAILABLE']]) {
       it(`names a ${behaviour} failure in every mode, with codes only`, async function () {
         const { server, url } = await failingServer(behaviour);
         try {
           const { CredentialVerifierService } = require('../src/vc/verifier-service');
-          const provider = R.makeProvider(url, { network: { name: 'local', chainId: 1337 }, timeoutMs: 2000 });
+          const provider = R.makeProvider(url, { network: { name: 'local', chainId: 1337 }, timeoutMs: 1000 });
           const iface = new ethers.utils.Interface(ABI);
           const contract = new ethers.Contract(ADDRESS, ABI, provider);
           const ctx = { provider, counter: R.requestCounter(provider), credential: { '@context': ['https://www.w3.org/ns/credentials/v2', 'https://w3id.org/security/data-integrity/v2'],
@@ -166,6 +169,11 @@ describe('harness: connections, mode order, intervals and arguments', function (
         .to.equal('SERVER_ERROR/RPC_-32000/BLOCK_UNAVAILABLE');
       expect(R.errorCode({ code: 'SERVER_ERROR', status: 429, body: 'see https://x.example/v3/TOKEN' })).to.equal('SERVER_ERROR/HTTP_429');
       expect(R.errorCode(new Error('x'))).to.equal('UNKNOWN_ERROR');
+      // Codes a server chooses: only JSON-RPC integers are kept below the top level, and only safe ones.
+      expect(R.errorCode({ code: 'SERVER_ERROR', error: { code: 'ABCD1234SECRETTOKEN' } })).to.equal('SERVER_ERROR');
+      expect(R.errorCode({ code: 'SERVER_ERROR', error: { code: 1e21 } })).to.equal('SERVER_ERROR');
+      expect(R.errorCode({ code: 'SERVER_ERROR', serverError: { code: 'ECONNREFUSED' } })).to.equal('SERVER_ERROR/ECONNREFUSED');
+      expect(R.errorCode({ code: 'CALL_EXCEPTION', error: { code: 'TIMEOUT' } })).to.equal('CALL_EXCEPTION/TIMEOUT');
     });
   });
 

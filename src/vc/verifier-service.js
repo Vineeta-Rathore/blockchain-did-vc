@@ -32,6 +32,13 @@ function isNonNegativeInteger(value) {
 // is written, never the text. Nothing recognisable gives UNKNOWN_ERROR. The Sepolia scripts use this same function
 // (scripts/lib/rpc.js), so a failure is reported alike in every mode.
 const BLOCK_MISSING = /header not found|unknown block|block not found|missing trie node/i;
+// Below the top level, a string code is kept only if ethers or Node defined it (a server could put any text there),
+// and a number only if it is a safe integer (JSON-RPC error codes are integers).
+const KNOWN_CODES = new Set(['UNKNOWN_ERROR', 'NOT_IMPLEMENTED', 'UNSUPPORTED_OPERATION', 'NETWORK_ERROR', 'SERVER_ERROR',
+  'TIMEOUT', 'BUFFER_OVERRUN', 'NUMERIC_FAULT', 'MISSING_NEW', 'INVALID_ARGUMENT', 'MISSING_ARGUMENT',
+  'UNEXPECTED_ARGUMENT', 'CALL_EXCEPTION', 'INSUFFICIENT_FUNDS', 'NONCE_EXPIRED', 'REPLACEMENT_UNDERPRICED',
+  'UNPREDICTABLE_GAS_LIMIT', 'TRANSACTION_REPLACED', 'ACTION_REJECTED']);
+const NODE_CODE = /^E[A-Z][A-Z_]{1,30}$/;
 
 function errorCode(error) {
   const parts = [];
@@ -44,8 +51,9 @@ function errorCode(error) {
       if (!e || typeof e !== 'object' || seen.has(e)) continue;
       seen.add(e);
       const { code, status } = e;
-      if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(code)) parts.push(code);
-      else if (typeof code === 'number' && Number.isInteger(code)) parts.push(`RPC_${code}`);
+      if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(code) &&
+          (depth === 0 || KNOWN_CODES.has(code) || NODE_CODE.test(code))) parts.push(code);
+      else if (typeof code === 'number' && Number.isSafeInteger(code)) parts.push(`RPC_${code}`);
       if (Number.isInteger(status)) parts.push(`HTTP_${status}`);
       // ethers 5.8 keeps no status when HTTP 429 used up its attempts (throttleLimit): fetchJson then throws
       // SERVER_ERROR with reason "failed response", which it does for nothing else on a POST (redirects are followed

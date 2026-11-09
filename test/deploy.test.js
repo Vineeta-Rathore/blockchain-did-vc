@@ -31,11 +31,15 @@ describe('deploy-sepolia.js: fresh runs, re-runs and interrupted runs (local Har
     const port = await freePort();
     url = `http://127.0.0.1:${port}/`;
     node = spawn(process.execPath, [path.join(ROOT, 'node_modules', 'hardhat', 'internal', 'cli', 'bootstrap.js'), 'node',
-      '--hostname', '127.0.0.1', '--port', String(port)], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+      '--hostname', '127.0.0.1', '--port', String(port)], { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] });
+    // The node must not outlive the test run (a running node locks files in node_modules).
+    process.on('exit', () => node.kill());
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('node did not start')), 120000);
+      let seen = '';
       node.stdout.on('data', (d) => {
-        if (String(d).includes('Started HTTP')) { clearTimeout(timer); resolve(); }
+        seen = (seen + String(d)).slice(-4096);
+        if (seen.includes('Started HTTP')) { clearTimeout(timer); resolve(); }
       });
       node.on('exit', () => reject(new Error('node exited')));
     });
@@ -58,8 +62,9 @@ describe('deploy-sepolia.js: fresh runs, re-runs and interrupted runs (local Har
     fs.writeFileSync(keyFile, JSON.stringify({ address: wallet.address, privateKey: wallet.privateKey }));
     const out = path.join(dir, 'record.json');
     const run = (...extra) => new Promise((resolve) => {
+      const defaults = extra.includes('--max-base-fee-gwei') ? [] : ['--max-base-fee-gwei', '50'];
       execFile(process.execPath, [path.join(ROOT, 'scripts', 'deploy-sepolia.js'), '--key', keyFile, '--out', out,
-        '--secrets-dir', path.join(dir, 'secrets'), '--expect-chain', '1337', '--max-base-fee-gwei', '50', ...extra],
+        '--secrets-dir', path.join(dir, 'secrets'), '--expect-chain', '1337', ...defaults, ...extra],
       { cwd: ROOT, timeout: 240000, env: { ...process.env, SEPOLIA_RPC_URL: url } },
       (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stdout, stderr }));
     });
@@ -139,6 +144,42 @@ describe('deploy-sepolia.js: fresh runs, re-runs and interrupted runs (local Har
     const rec = record();
     expect(rec.txs.deploy.hash).to.equal(pending.hashes[1]);
     expect(await wallet.getTransactionCount()).to.equal(pending.nonce + 4);
+  });
+
+  it('after a stop before signing (base fee too high), completes on a plain re-run', async function () {
+    const { wallet, run, record } = setup();
+    let r = await run('--max-base-fee-gwei', '0.000000001');
+    expect(r.stderr).to.include('BASE_FEE_TOO_HIGH');
+    expect(record().pending.deploy.hashes).to.deep.equal([]);
+    r = await run('--wait-timeout-s', '30');
+    expect(r.code, r.stderr).to.equal(0);
+    expect(r.stdout).to.not.include('undefined');
+    expect(Object.keys(record().txs)).to.deep.equal(STEPS);
+    expect(await wallet.getTransactionCount()).to.equal(4);
+  });
+
+  it('refuses invalid numbers for the wait timeout and the fees', async function () {
+    const { run } = setup();
+    for (const [args, code] of [[['--wait-timeout-s', 'abc'], 'ARG_WAIT_TIMEOUT'], [['--wait-timeout-s', '0'], 'ARG_WAIT_TIMEOUT'],
+      [['--wait-timeout-s', '--resend'], 'ARG_WAIT_TIMEOUT'], [['--tip-gwei', 'x'], 'ARG_TIP'],
+      [['--max-base-fee-gwei', '-1'], 'ARG_MAX_BASE_FEE']]) {
+      const r = await run(...args);
+      expect(r.stderr, args.join(' ')).to.include(code);
+    }
+  });
+
+  it('refuses a replacement whose fee would exceed the policy ceiling (2 x maximum base fee + tip)', async function () {
+    const { run, record } = setup();
+    await rpc.send('evm_setAutomine', [false]);
+    const base = (await rpc.getBlock('latest')).baseFeePerGas;
+    const maxBase = ethers.utils.formatUnits(base.mul(105).div(100).add(1), 'gwei');
+    let r = await run('--max-base-fee-gwei', maxBase, '--wait-timeout-s', '1');
+    expect(r.stderr).to.include('TX_PENDING_TIMEOUT');
+    r = await run('--max-base-fee-gwei', maxBase, '--resend', '--wait-timeout-s', '1');
+    expect(r.stderr).to.include('FEE_CAP_REACHED');
+    expect(record().pending.deploy.hashes).to.have.length(1);
+    await rpc.send('evm_setAutomine', [true]);
+    await rpc.send('evm_mine', []);
   });
 
   it('stops when the saved nonce was used by a transaction it did not send', async function () {

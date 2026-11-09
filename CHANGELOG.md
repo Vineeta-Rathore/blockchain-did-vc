@@ -86,9 +86,14 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   scripts reported the same JSON-RPC error with different codes, and in most modes every failure was logged as
   `SERVER_ERROR` or `CALL_EXCEPTION`. Both now walk the causes that ethers keeps and log codes such as
   `SERVER_ERROR/HTTP_429` or `CALL_EXCEPTION/SERVER_ERROR/RPC_-32000/BLOCK_UNAVAILABLE` (the last when the node
-  reports a missing block); only codes are written, never messages.
+  reports a missing block); only codes are written, never messages. Below the top level only codes that ethers or
+  Node define, and integer JSON-RPC codes, are kept. An HTTP 429 is reported at once as `HTTP_429` instead of waiting
+  for the server's `Retry-After`.
 - `deploy-sepolia.js --resend` signed the replacement at the current fees, which nodes refuse as underpriced when the
-  base fee has not risen; it now pays at least 12.5% more than the transaction it replaces.
+  base fee has not risen; it now pays at least 12.5% more than the transaction it replaces, up to the fee policy's
+  ceiling. A run that stopped after saving a step's nonce but before signing waited for a transaction that did not
+  exist; such a step is now signed on a plain re-run. Invalid `--wait-timeout-s`, `--tip-gwei` and
+  `--max-base-fee-gwei` values are refused (an invalid timeout meant an endless wait).
 - `deploy-sepolia.js` checked for a fixed 0.02 SepoliaETH, less than the setup can cost at the highest base fee it
   accepts; it now requires 28 million gas at the highest fee it may pay (default maximum base fee 0.5 gwei).
 
@@ -102,7 +107,7 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   second transaction for a step; it checks chain, code, DID ownership and the issuer key before writing), `analyze-latency.js` and `scripts/lib/stats.js` (one
   definition per statistic), `check_stats_numpy.py`, `plot-latency.py`.
 - Hardhat's hard fork is pinned to osaka. The Hardhat plugins are development dependencies (only `ethers` is needed
-  at run time), and `package.json` requires Node.js 20 or later.
+  at run time), and `package.json` declares Node.js 20 or later (`engines`).
 - No Hardhat network for Sepolia and no private key in the environment: the Sepolia scripts run with plain Node, read
   only `SEPOLIA_RPC_URL`, and take the deployer key from a file given on the command line. `dotenv` is no longer a
   dependency, and `npm run deploy:sepolia` is gone.
@@ -115,7 +120,7 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   the first and second halves of each, and headers that disagree; `measure-local.js` runs 100 warm-up verifications
   per process (10 before) and records whether the checkout differs from its commit; `measure-sepolia.js` takes
   `--timeout-ms` and records the commit. `requirements.txt` lists the Python packages.
-- Tests: 160 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3), leak tests of
+- Tests: 164 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3), leak tests of
   the Sepolia scripts, runs of `deploy-sepolia.js` against a local node (fresh, completed, refused and interrupted
   runs), and a check that the gas figures in the READMEs and this file match the measurement.
 

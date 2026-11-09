@@ -208,7 +208,8 @@ function analyzeSepolia(rows) {
   // its rows never pair with those of the first.
   const byBlock = (r) => `${r.run || ''}|${r.block}${r.reserve ? '|reserve' : ''}`;
   const key = (r) => `${byBlock(r)}|${r.iteration}`;
-  // Pairs only iterations in which both modes succeeded; the interval resamples whole blocks.
+  // Pairs only iterations in which both modes succeeded; the block interval is the order-statistic interval of the
+  // per-block medians of the ratios.
   const pairs = (a, b) => {
     const mb = new Map((byMode.get(b) || []).map((r) => [key(r), r]));
     const left = [];

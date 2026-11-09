@@ -122,8 +122,10 @@ function installAgents({ idleTimeoutMs = 600000 } = {}) {
   return stats;
 }
 
+// throttleCallback returns false, so that ethers reports an HTTP 429 at once (status kept, HTTP_429) instead of
+// sleeping for the server's Retry-After, which could outlast the request timeout and be logged as TIMEOUT.
 function connectionInfo(url, timeoutMs = 30000) {
-  return { url, throttleLimit: 1, timeout: timeoutMs };
+  return { url, throttleLimit: 1, timeout: timeoutMs, throttleCallback: async () => false };
 }
 
 // ethers v5's JsonRpcProvider.send reuses an eth_blockNumber or eth_chainId request made in the same event-loop turn

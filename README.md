@@ -54,7 +54,7 @@ does not reproduce its bytecode; its interface is the version 1.0.0 ABI ([`resul
 ```bash
 npm ci                 # install the locked toolchain (Hardhat 2.29.0, ethers 5.8.0)
 npx hardhat compile    # solc 0.8.19, optimiser on, 200 runs
-npm test               # 160 tests
+npm test               # 164 tests
 npm run measure-gas    # gas of each operation, on the osaka schedule and on Sepolia's
 ```
 
@@ -63,10 +63,10 @@ Run every command from the repository root. `npm ci` installs exactly the versio
 version instead of using this one.
 
 `npm test` runs eight suites: the registry (65 tests), credentials and verification (51), leak tests (14), the RPC
-helpers' secret handling (6), the measurement harness (12), the deployment script (5), the latency analysis (4) and
+helpers' secret handling (6), the measurement harness (13), the deployment script (8), the latency analysis (4) and
 the gas model (3). The deployment tests run `deploy-sepolia.js` against a Hardhat node they start on a free local
-port: a fresh run, re-runs of a completed record, refusals, a transaction dropped before it was mined, a replacement
-with `--resend`, and a nonce used by another transaction. The leak tests run every measurement mode, and both Sepolia
+port: a fresh run, re-runs of a completed record, refusals, a run stopped before signing, a transaction dropped
+before it was mined, a replacement with `--resend` and its fee ceiling, and a nonce used by another transaction. The leak tests run every measurement mode, and both Sepolia
 scripts as child processes, against a local fake server that fails requests in eight ways, and check the raw rows,
 output, logs and records for the fake token, the URL path and the fake deployer key, and that no request is retried.
 
@@ -245,7 +245,10 @@ one process (local) or one block (Sepolia) are not independent, so it also gives
 the median of those medians with a distribution-free interval from their order statistics and its exact coverage (the
 range of five process medians, 93.75%; the 2nd to the 9th of ten block medians, 97.9%), the same for the paired
 speed-ups, and the medians of the first and second halves of each process or block (a check that the warm-up was long
-enough). The pooled interval treats every row as independent and is printed as such. It warns
+enough). The pooled interval treats every row as independent and is printed as such, and so does the bootstrap of
+a paired speed-up ("pairs resampled"). The coverage of the interval over medians is exact if the process or block
+medians are independent draws from one continuous distribution; the ten Sepolia blocks sit at fixed times of one day,
+so what it estimates is the median over those time slots on that day, not over days. It warns
 when the headers of one log disagree (commit, machine, versions), when a process index repeats, and when a header
 records a checkout that differs from its commit. `scripts/lib/stats.js` defines every statistic once: the conventional median, quartiles by the Hyndman and Fan type 7
 rule, the nearest-rank 95th percentile, an order-statistic confidence interval for the median (of the rows, or of the
@@ -271,7 +274,9 @@ The two Sepolia scripts run with plain Node, not through Hardhat, and no Hardhat
   transaction is then signed, and its hash and raw form are saved before it is broadcast. A re-run looks for a receipt
   of any transaction sent for the step and otherwise broadcasts the saved one again; `--resend` signs a replacement
   with the same nonce, at the current fees or 12.5% above the last signed transaction's, whichever is higher (nodes
-  refuse a replacement that pays less than 10% more), and whichever is mined is recorded. A failed transaction (status 0) is
+  refuse a replacement that pays less than 10% more), never above twice the maximum base fee plus the tip
+  (`FEE_CAP_REACHED`), and whichever is mined is recorded with its own fees. A step whose nonce was saved but whose
+  transaction was never signed (the run stopped first, for example on `BASE_FEE_TOO_HIGH`) is signed on a plain re-run. A failed transaction (status 0) is
   recorded and its step starts again. One run at a time (a lock file next to the record, removed by hand if a run is
   killed); a completed record is left untouched. A re-run also stops if the record
   belongs to another chain or deployer, if the code at the recorded address differs from the compiled contract, if a

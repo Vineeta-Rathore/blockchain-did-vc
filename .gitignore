@@ -6,9 +6,11 @@ artifacts/
 cache/
 typechain-types/
 
-# Secrets — never commit
-.env
-.env.local
+# Secrets: never commit
+.env*
+!.env.example
+*.key
+secrets/
 
 # Coverage / logs
 coverage/

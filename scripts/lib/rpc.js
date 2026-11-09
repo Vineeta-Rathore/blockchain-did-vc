@@ -14,26 +14,49 @@ function readRpcUrl(envFile) {
   if (!envFile) return null;
   const line = fs.readFileSync(envFile, 'utf8').split(/\r?\n/).find((l) => /^\s*SEPOLIA_RPC_URL\s*=/.test(l));
   if (!line) return null;
-  return line.replace(/^\s*SEPOLIA_RPC_URL\s*=\s*/, '').replace(/^["']|["']$/g, '').trim() || null;
+  const value = line
+    .replace(/^\s*SEPOLIA_RPC_URL\s*=\s*/, '')
+    .replace(/\s+#.*$/, '') // an inline comment after the value
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .trim();
+  return value || null;
 }
 
-// Parts of the URL that must never be written: the whole URL, userinfo, path and query.
+const HEX = /^(0x)?[0-9a-fA-F]+$/;
+
+// A URL part counts as a secret when it looks like a credential: 8 characters or more with both letters and digits
+// (hex keys, base62 keys, UUIDs), or 20 or more with both cases. Ordinary words in a host, path or query ("sepolia",
+// "ethereum-sepolia-rpc", "network") are not secrets: treating them as secrets would blank the log's own fields, such
+// as "kind": "sepolia". A query value is also a secret when its name says it is a key. The whole URL is always a
+// secret, and so are the full path and query when they hold a token.
+function looksLikeToken(value) {
+  if (typeof value !== 'string') return false;
+  return (value.length >= 8 && /\d/.test(value) && /[A-Za-z]/.test(value)) ||
+    (value.length >= 20 && /[a-z]/.test(value) && /[A-Z]/.test(value));
+}
+
+// Parts of the URL that must never be written.
 function secretParts(url) {
   const parts = new Set();
   if (!url) return parts;
   parts.add(url);
   try {
     const u = new URL(url);
-    if (u.username) parts.add(u.username);
-    if (u.password) parts.add(u.password);
-    if (u.pathname && u.pathname !== '/') {
-      parts.add(u.pathname);
-      for (const segment of u.pathname.split('/')) if (segment.length >= 6) parts.add(segment);
+    for (const info of [u.username, u.password]) {
+      const value = decodeURIComponent(info || '');
+      if (value.length >= 4) parts.add(value);
     }
-    if (u.search) {
-      parts.add(u.search);
-      for (const [, value] of u.searchParams) if (value.length >= 6) parts.add(value);
-    }
+    for (const label of u.hostname.split('.')) if (looksLikeToken(label)) parts.add(label);
+    const pathTokens = u.pathname.split('/').filter(looksLikeToken);
+    pathTokens.forEach((token) => parts.add(token));
+    if (pathTokens.length) parts.add(u.pathname);
+    // a query value is a secret if it looks like a token, or if its name says it is a key, whatever its shape
+    const queryTokens = [...u.searchParams.entries()]
+      .filter(([name, value]) => looksLikeToken(value) || (/key|token|secret|auth|pass|cred/i.test(name) && value.length >= 4))
+      .map(([, value]) => value);
+    queryTokens.forEach((token) => parts.add(token));
+    if (queryTokens.length) parts.add(u.search);
   } catch {
     // an unparsable URL is still removed as a whole
   }
@@ -41,20 +64,28 @@ function secretParts(url) {
 }
 
 function makeRedactor(url, extraSecrets = []) {
-  const parts = [...secretParts(url), ...extraSecrets.filter(Boolean)].sort((a, b) => b.length - a.length);
+  const variants = new Set();
+  for (const part of [...secretParts(url), ...extraSecrets.filter(Boolean)]) {
+    variants.add(part);
+    if (HEX.test(part)) {
+      const digits = part.replace(/^0x/, '');
+      for (const v of [digits.toLowerCase(), digits.toUpperCase()]) variants.add(v);
+    }
+  }
+  const parts = [...variants].sort((a, b) => b.length - a.length);
   return (text) => {
     let out = String(text);
     for (const part of parts) out = out.split(part).join('[redacted]');
-    // any other URL keeps only its scheme and host
-    return out.replace(/(https?:\/\/[^/\s"'<>]+)[^\s"'<>]*/g, '$1/[redacted]');
+    // any other URL keeps only its scheme and host: user information, path and query are removed
+    return out.replace(/(https?:\/\/)(?:[^@/\s"'<>]*@)?([^/\s"'<>?#]+)[^\s"'<>]*/g, '$1$2/[redacted]');
   };
 }
 
-// The host is logged only when it is not account-specific (no long token in it).
+// The host is logged only when none of its labels looks like a token.
 function providerLabel(url) {
   try {
     const host = new URL(url).hostname;
-    return /[a-z0-9]{16,}/i.test(host.replace(/\./g, '')) && /\d/.test(host) ? 'custom-rpc' : host;
+    return host.split('.').some(looksLikeToken) ? 'custom-rpc' : host;
   } catch {
     return 'unparsable-rpc-url';
   }
@@ -109,7 +140,7 @@ function requestCounter(provider) {
 function makeWriter(redact, sink) {
   return (text) => {
     const clean = redact(text);
-    if (BANNED.some((b) => clean.includes(b))) throw new Error('SELF_SCAN_FAILED');
+    if (BANNED.some((b) => clean.includes(b))) throw Object.assign(new Error('SELF_SCAN_FAILED'), { code: 'SELF_SCAN_FAILED' });
     sink(clean);
     return clean;
   };
@@ -132,7 +163,14 @@ function installGuards(redact) {
 
 function scanText(text, secrets) {
   const hits = BANNED.filter((b) => text.includes(b));
-  for (const s of secrets) if (s && text.includes(s)) hits.push('a secret value');
+  const lower = text.toLowerCase();
+  for (const secret of secrets) {
+    if (!secret) continue;
+    const found = HEX.test(secret)
+      ? lower.includes(secret.toLowerCase().replace(/^0x/, ''))
+      : text.includes(secret);
+    if (found) hits.push('a secret value');
+  }
   return hits;
 }
 

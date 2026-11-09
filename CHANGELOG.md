@@ -22,8 +22,14 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
 
 - `eddsa-jcs-2022` proofs now carry the credential's `@context` (section 3.3.1, step 2, of the cryptosuite
   specification), so proof values agree with the W3C test vector. Credentials signed by version 1.0.0 still verify.
-- The verifier checks the proof's type, cryptosuite and purpose, and that the credential's `@context` starts with the
-  proof's `@context` (section 3.3.2).
+- The verifier checks the proof's type, cryptosuite, purpose and expiry (`proof.expires`), and that the credential's
+  `@context` equals the proof's (section 3.3.2 requires only a prefix; entries appended after signing would not be
+  signed). The proof value and multikeys are length-checked before base58 decoding, and keys need the multibase `z`.
+- Step V1 requires the VC 2.0 base context first and the type `VerifiableCredential`, rejects the VC 1.1 properties
+  `issuanceDate` and `expirationDate` instead of ignoring them, and accepts only date-time stamps with a time zone.
+- Step V5 requires the verification method to be a `Multikey` controlled by the issuer DID and named under it.
+- Invalid options raise a `TypeError` (`clockToleranceMs` must be a finite number of 0 or more, `blockLag` an integer
+  of 0 or more); an invalid caller block number gives `VERIFICATION_ERROR` with `INVALID_BLOCK_TAG`.
 - `validFrom` is checked, with a clock tolerance (constructor option `clockToleranceMs`, default 60 s): a credential
   that is not yet valid fails with `CREDENTIAL_NOT_YET_VALID`.
 - All contract reads of one verification are pinned to one block, read first (step B0) or given by the caller
@@ -44,6 +50,10 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
 - A correctly signed credential with an empty `id` verified as `VALID`, and one without an `id` failed at the
   revocation check with `VERIFICATION_ERROR`. Revocation is keyed by the credential `id`, so both now fail at V1 with
   `MALFORMED_CREDENTIAL`.
+- A VC 1.1 credential, or a signed object without `@context` and `type`, verified as `VALID`, so a VC 1.1
+  `expirationDate` was never enforced; a string or NaN `clockToleranceMs` switched the `validFrom` check off;
+  timestamps without a time zone were read in the verifier's local zone; a very long proof value took seconds to
+  decode (15.9 s for 200,000 characters).
 
 ### Measurements, scripts and data
 
@@ -51,7 +61,8 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   version 1.0.0 placeholder inputs as a second case. It also counts each transaction's storage writes and gives its
   gas under the schedule that Sepolia has used since 6 October 2026 (`scripts/lib/gas-schedule.js`).
 - New scripts: `measure-local.js` and `measure-sepolia.js` (verification latency, every sample logged),
-  `deploy-sepolia.js` (resumable setup with explicit fees), `analyze-latency.js` and `scripts/lib/stats.js` (one
+  `deploy-sepolia.js` (setup with explicit fees; each step's nonce and hash are saved, so a re-run never sends a
+  second transaction for a step; it checks chain, code, DID ownership and the issuer key before writing), `analyze-latency.js` and `scripts/lib/stats.js` (one
   definition per statistic), `check_stats_numpy.py`, `plot-latency.py`.
 - Hardhat's hard fork is pinned to osaka.
 - No Hardhat network for Sepolia and no private key in the environment: the Sepolia scripts run with plain Node, read
@@ -61,7 +72,7 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   `measure-local.js`.
 - `results/did2_sepolia.jsonl` is now `results/sepolia_2026-07-21_n20.jsonl` (content unchanged);
   `results/README.md` replaces `results/sepolia_results.md` and describes every log.
-- Tests: 86 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3) and leak tests of
+- Tests: 110 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3) and leak tests of
   the Sepolia scripts.
 
 ## 1.0.0 (24 July 2026)

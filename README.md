@@ -53,12 +53,14 @@ does not reproduce its bytecode; its interface is the version 1.0.0 ABI ([`resul
 ```bash
 npm ci                 # install the locked toolchain (Hardhat 2.29.0, ethers 5.8.0)
 npx hardhat compile    # solc 0.8.19, optimiser on, 200 runs
-npm test               # 86 tests
+npm test               # 110 tests
 npm run measure-gas    # gas of each operation, on the osaka schedule and on Sepolia's
 ```
 
-`npm test` runs four suites: the registry (43 tests), credentials and verification (35), leak tests of the Sepolia
-scripts' error handling against a local fake server (6), and the gas model (2).
+`npm test` runs five suites: the registry (43 tests), credentials and verification (45), leak tests (14), the RPC
+helpers' secret handling (6) and the gas model (2). The leak tests run every measurement mode, and both Sepolia
+scripts as child processes, against a local fake server that fails requests in eight ways, and check the raw rows,
+output, logs and records for the fake token, the URL path and the fake deployer key, and that no request is retried.
 
 ## Repository layout
 
@@ -142,18 +144,21 @@ the credential's `@context` is copied into the proof before the proof configurat
 
 | Step | Check | Result if it fails |
 |---|---|---|
-| V1 | `id` (a non-empty string, because revocation is keyed by it), `issuer`, `credentialSubject.id` and `proof.verificationMethod` are present; `validFrom` and `validUntil`, if present, are valid dates and `validUntil` is not earlier than `validFrom` | `MALFORMED_CREDENTIAL`, `MISSING_PROOF` |
-| B0 | read the newest block number N (or use the caller's block) | `VERIFICATION_ERROR` |
+| V1 | `@context` starts with the VC 2.0 base context and `type` includes `VerifiableCredential`; `id` (a non-empty string, because revocation is keyed by it), `issuer`, `credentialSubject.id` and `proof.verificationMethod` are present; the VC 1.1 properties `issuanceDate` and `expirationDate` are absent; `validFrom` and `validUntil`, if present, are date-time stamps with a time zone and `validUntil` is not earlier than `validFrom` | `MALFORMED_CREDENTIAL`, `MISSING_PROOF` |
+| B0 | read the newest block number N (or use the caller's block number, an integer 0 or more) | `VERIFICATION_ERROR` |
 | V2 | the issuer DID exists and is active at block N | `ISSUER_DID_INACTIVE_OR_UNKNOWN` |
 | V3 | the subject DID exists and is active at block N | `SUBJECT_DID_INACTIVE_OR_UNKNOWN` |
 | V4 | `validFrom` is not later than now plus the clock tolerance (default 60 s); `validUntil` is later than now | `CREDENTIAL_NOT_YET_VALID`, `CREDENTIAL_EXPIRED` |
-| V5 | the issuer's DID document at block N is active, carries the issuer DID as its `id` and lists the proof's verification method | `ISSUER_DID_INACTIVE_OR_UNKNOWN`, `VERIFICATION_METHOD_NOT_FOUND` |
-| V6 | the proof has type `DataIntegrityProof`, cryptosuite `eddsa-jcs-2022` and purpose `assertionMethod`; the credential's `@context` starts with the proof's `@context`; the Ed25519 signature is valid | `INVALID_SIGNATURE` |
+| V5 | the issuer's DID document at block N is active, carries the issuer DID as its `id` and lists the proof's verification method, which is a `Multikey` controlled by the issuer DID and named under it | `ISSUER_DID_INACTIVE_OR_UNKNOWN`, `VERIFICATION_METHOD_NOT_FOUND` |
+| V6 | the proof has type `DataIntegrityProof`, cryptosuite `eddsa-jcs-2022` and purpose `assertionMethod`, and has not expired (`proof.expires`); the credential's `@context` equals the proof's; the Ed25519 signature is valid | `INVALID_SIGNATURE` |
 | V7 | the issuer has not revoked the credential at block N | `CREDENTIAL_REVOKED` |
 | V8 | all checks passed | `VALID` |
 
-Same-block reads: the four contract reads (V2, V3, V5, V7) are `eth_call` requests pinned to block N, so one
-verification never mixes two chain states. The result reports N as `checkedAtBlock`. A failed request returns
+Same-block reads: the four contract reads (V2, V3, V5, V7) are `eth_call` requests pinned to block number N, so all
+four answers describe the chain at that height (a reorganisation that replaces block N while the verification runs is
+not detected). The result reports N as `checkedAtBlock`; with a caller's past block number, the answer is as of that
+block. Invalid options (`clockToleranceMs` that is not a finite number of 0 or more, `blockLag` that is not an integer
+of 0 or more) raise a `TypeError`; an invalid block number gives `VERIFICATION_ERROR` with `INVALID_BLOCK_TAG`. A failed request returns
 `VERIFICATION_ERROR` with an `errorCode` (for example `TIMEOUT` or `SERVER_ERROR`), never the library's error message,
 which can contain the RPC URL.
 
@@ -219,8 +224,12 @@ The two Sepolia scripts run with plain Node, not through Hardhat, and no Hardhat
   contract reads sent in sequence (S), concurrently (C) and as one JSON-RPC batch (Bt), in a rotating order, at ten
   fixed times of day (machine local time). `--pilot` runs three labelled iterations.
 - `deploy-sepolia.js` deploys the contract, registers an issuer DID and a subject DID with fresh Ed25519 keys, signs
-  two credentials and revokes one of them with reason code 9. Before each step it reads the chain and skips what is
-  done, so a second run cannot deploy a second contract. It sets fees explicitly (a 0.01 gwei priority fee and a
+  two credentials and revokes one of them with reason code 9. Each step's nonce is saved in the record before its
+  transaction is sent, and the hash right after; a re-run waits for that transaction, or sends the step again with the
+  same nonce (`--resend`, to replace a stuck one), which the chain accepts only once. A re-run also stops if the record
+  belongs to another chain or deployer, if the code at the recorded address differs from the compiled contract, if a
+  DID is controlled by another address, or if the issuer key no longer matches the recorded inputs. Only Sepolia and
+  local Hardhat chains are accepted. It sets fees explicitly (a 0.01 gwei priority fee and a
   maximum fee of twice the latest base fee plus that tip; `--tip-gwei`) and stops before sending if the base fee is
   above 1 gwei (`--max-base-fee-gwei`).
 
@@ -228,11 +237,16 @@ How secrets are handled:
 
 - The RPC URL is read from the `SEPOLIA_RPC_URL` environment variable or from that single line of the file given with
   `--env` (see [`.env.example`](.env.example)); nothing else in that file is read.
-- The deployer key is a separate JSON file (`{"address": ..., "privateKey": ...}`) given with `--key` and kept outside
-  the repository. The issuer's Ed25519 key is written once to `--secrets-dir` (default `~/.blockchain-did-vc-secrets`) and never
-  printed; delete it after the deployment. The subject's key is never stored.
-- Everything the scripts write passes through one function that removes the URL's credentials, path and query and
-  then scans for key material; a hit stops the write. Errors are reduced to codes. Requests are never retried.
+- The deployer key is a separate JSON file (`{"address": ..., "privateKey": ...}`) given with `--key`. The issuer's
+  Ed25519 key is written once to `--secrets-dir` (default `~/.blockchain-did-vc-secrets`, file mode 600) and never
+  printed; it is needed only until the credentials are signed, and is deleted after the deployment. The subject's key
+  is never stored. The script refuses a key file or secrets folder inside a git working tree.
+- What the scripts print or log passes through one function that removes the URL and any token-like part of it (user
+  information, and host labels, path segments and query values that look like keys; ordinary words such as
+  `sepolia` stay) and then scans for key material; a hit stops the write. The deployment record is scanned for the
+  deployer key and the URL's secret parts before every save. Errors are reduced to codes. Requests are never retried.
+- The deployment record publishes credentials A and B in full. They are test credentials of the deployment's own
+  DIDs; B stays valid for 365 days and, as there is no holder binding, can be presented by anyone who copies it.
 
 ## Limits
 
@@ -242,6 +256,19 @@ How secrets are handled:
   with their reason codes.
 - `did:smid` is this artifact's method name. It has no method specification and is not in the W3C list of DID methods,
   and no DID resolver driver exists for it.
+- A DID name proves nothing by itself. `createDID` registers any unused name for whoever calls it first, and
+  `changeController` hands a DID to another address in one step, without that address's consent. `VALID` means that
+  the credential was signed with a key in the document of an active registered DID; which issuer DIDs to trust is the
+  relying party's decision, outside the verifier.
+- The registry has no `assertionMethod` relationship: any verification method of the issuer's document can sign
+  credentials.
+- Administrators can pause the registry for as long as they like. A pause also stops key rotation, controller changes
+  and reactivation, so during a pause the only remedy for a leaked key is to deactivate the DID. The owner can never be
+  removed or replaced, so a compromised owner key can keep these functions paused.
+- Delegates are recorded but grant no permission in this contract.
+- Anyone can add DIDs to another address's list by transferring them to it, which makes later transfers by that
+  address more expensive. `rotateKey` replaces one entry of the verification methods, so a key listed twice stays
+  usable through the other entry.
 - The contract has not been audited by a third party.
 
 ## Standards

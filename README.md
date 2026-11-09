@@ -41,7 +41,7 @@ does not reproduce its bytecode; its interface is the version 1.0.0 ABI ([`resul
 
 ## Requirements
 
-- Node.js 20 or later (Hardhat's simulator, EDR, needs it) and npm. Tested with Node.js 22.10.0 and npm 10.9.0 on
+- Node.js 20 or later (Hardhat's simulator, EDR, needs it; `engines` in `package.json`) and npm. Tested with Node.js 22.10.0 and npm 10.9.0 on
   Windows 11.
 - Python 3 with numpy, only for `scripts/check_stats_numpy.py`, and with matplotlib, only for
   `scripts/plot-latency.py`: `python3 -m pip install -r requirements.txt` (numpy 1.26.2, matplotlib 3.10.5; tested
@@ -54,7 +54,7 @@ does not reproduce its bytecode; its interface is the version 1.0.0 ABI ([`resul
 ```bash
 npm ci                 # install the locked toolchain (Hardhat 2.29.0, ethers 5.8.0)
 npx hardhat compile    # solc 0.8.19, optimiser on, 200 runs
-npm test               # 151 tests
+npm test               # 160 tests
 npm run measure-gas    # gas of each operation, on the osaka schedule and on Sepolia's
 ```
 
@@ -62,8 +62,11 @@ Run every command from the repository root. `npm ci` installs exactly the versio
 `npm install` may resolve newer ones. Outside the repository, `npx hardhat` offers to download another Hardhat
 version instead of using this one.
 
-`npm test` runs seven suites: the registry (62 tests), credentials and verification (50), leak tests (14), the RPC
-helpers' secret handling (6), the measurement harness (12), the latency analysis (4) and the gas model (3). The leak tests run every measurement mode, and both Sepolia
+`npm test` runs eight suites: the registry (65 tests), credentials and verification (51), leak tests (14), the RPC
+helpers' secret handling (6), the measurement harness (12), the deployment script (5), the latency analysis (4) and
+the gas model (3). The deployment tests run `deploy-sepolia.js` against a Hardhat node they start on a free local
+port: a fresh run, re-runs of a completed record, refusals, a transaction dropped before it was mined, a replacement
+with `--resend`, and a nonce used by another transaction. The leak tests run every measurement mode, and both Sepolia
 scripts as child processes, against a local fake server that fails requests in eight ways, and check the raw rows,
 output, logs and records for the fake token, the URL path and the fake deployer key, and that no request is retried.
 
@@ -130,7 +133,8 @@ about, which is the key of the entry and is not stored again:
 | 10 | aACompromise | yes |
 | above 10 | not defined | no |
 
-Rejected codes revert with "DIDRegistry: Invalid reason code". The reason code is public, like everything else the
+Rejected codes revert with "DIDRegistry: Invalid reason code", and an empty credential ID with "DIDRegistry: Invalid
+credential ID". The reason code is public, like everything else the
 registry stores.
 
 Administration. The deploying account becomes `owner` and the first administrator. Administrators can add and remove
@@ -198,10 +202,10 @@ verification method (the issuer's also one service entry):
 
 | Operation | osaka (Hardhat) | Glamsterdam (Sepolia) | New storage slots |
 |---|---|---|---|
-| Deployment (13,660 bytes of code) | 3,049,411 | 21,550,413 | 2 |
+| Deployment (13,752 bytes of code) | 3,069,348 | 21,692,728 | 2 |
 | `createDID`, a controller's first DID | 640,821 | 3,009,361 | 27 |
 | `createDID`, a controller's second DID | 466,991 | 2,139,071 | 19 |
-| `revokeCredential` (45-character credential ID, reason code 9) | 56,765 | 138,785 | 1 |
+| `revokeCredential` (45-character credential ID, reason code 9) | 56,791 | 138,811 | 1 |
 
 The Glamsterdam column is computed by `scripts/lib/gas-schedule.js` from the storage writes of each local
 transaction. It matched the gas that Sepolia reported for the same calls (`eth_simulateV1`, 9 November 2026)
@@ -266,7 +270,8 @@ The two Sepolia scripts run with plain Node, not through Hardhat, and no Hardhat
   two credentials and revokes one of them with reason code 9. Each step's nonce is saved in the record first; each
   transaction is then signed, and its hash and raw form are saved before it is broadcast. A re-run looks for a receipt
   of any transaction sent for the step and otherwise broadcasts the saved one again; `--resend` signs a replacement
-  with the same nonce and current fees, and whichever is mined is recorded. A failed transaction (status 0) is
+  with the same nonce, at the current fees or 12.5% above the last signed transaction's, whichever is higher (nodes
+  refuse a replacement that pays less than 10% more), and whichever is mined is recorded. A failed transaction (status 0) is
   recorded and its step starts again. One run at a time (a lock file next to the record, removed by hand if a run is
   killed); a completed record is left untouched. A re-run also stops if the record
   belongs to another chain or deployer, if the code at the recorded address differs from the compiled contract, if a

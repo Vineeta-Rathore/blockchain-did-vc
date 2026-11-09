@@ -18,15 +18,15 @@ seeded bootstrap for paired speed-ups, and the same order-statistic interval ove
 From `npx hardhat run scripts/measure-gas.js` (Hardhat 2.29.0, hard fork osaka). The Glamsterdam column is the gas of
 the same transactions under the schedule that Sepolia has used since 6 October 2026 (EIP-8037, EIP-8038, EIP-2780),
 computed by `scripts/lib/gas-schedule.js` from each transaction's storage writes; on 9 November 2026 it matched
-Sepolia's own figures for the same calls exactly (`eth_simulateV1`, base block 12,098,092; `test/GasSchedule.test.js`,
+Sepolia's own figures for the same calls exactly (`eth_simulateV1`, base block 12,098,173; `test/GasSchedule.test.js`,
 which also checks that this table carries the measured values).
 
 | Operation | osaka, realistic documents | Glamsterdam, realistic documents | osaka, version 1.0.0 placeholder inputs | Version 1.0.0 |
 |---|---|---|---|---|
-| Deployment | 3,049,411 | 21,550,413 | | 2,802,701 (Sepolia, July) |
+| Deployment | 3,069,348 | 21,692,728 | | 2,802,701 (Sepolia, July) |
 | `createDID`, a controller's first DID | 640,821 | 3,009,361 | 279,772 | 346,878 |
 | `createDID`, a controller's second DID | 466,991 | 2,139,071 | | 329,766 (Sepolia, July) |
-| `revokeCredential` (45-character `urn:uuid`) | 56,765 (reason code 9) | 138,785 | 56,016 (reason code 9) | 171,188 (30-character text reason) |
+| `revokeCredential` (45-character `urn:uuid`) | 56,791 (reason code 9) | 138,811 | 56,042 (reason code 9) | 171,188 (30-character text reason) |
 
 Realistic documents hold one Ed25519 Multikey verification method (a 203-character JSON string, stored once; version
 1.0.0 stored it a second time as an authentication method); the issuer's also holds one service entry (150
@@ -35,7 +35,7 @@ characters). The placeholder inputs are those of version 1.0.0 (`["key1"]`, `["s
 Why the two schedules differ: the transactions create 2, 27, 19 and 1 new storage slots. Under osaka a new slot costs
 20,000 gas (22,100 if not accessed before in the transaction); EIP-8037 charges 64 bytes x 1,530 gas = 97,920 gas, metered
 as state gas, and EIP-8038 adds 10,000 for the write, so each new slot costs about 88,000 gas more. The deployment
-also pays 1,530 gas per byte of its 13,660 bytes of code instead of 200, plus 120 x 1,530 gas for the new account.
+also pays 1,530 gas per byte of its 13,752 bytes of code instead of 200, plus 120 x 1,530 gas for the new account.
 EIP-2780 lowers the intrinsic gas of a call to an existing contract from 21,000 to 15,000 and of a creation from 53,000
 to 24,000. The gas of the version 1.1.0 deployment on Sepolia will be listed here next to these values (to be added).
 

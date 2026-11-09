@@ -31,22 +31,18 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { ethers } = require('ethers');
 const R = require('./lib/rpc');
+const { arg, flag } = require('./lib/cli');
 const { VerifiableCredentialService } = require('../src/vc/vc-service');
 const { didDocumentInputs, randomCredentialId, randomDidId } = require('./lib/fixtures');
 
-// Gas of the four setup transactions under Sepolia's schedule (deployment 21.55 M, createDID 3.01 M and 2.14 M,
-// revokeCredential 0.14 M, together 26.84 M; results/README.md), rounded up.
+// Gas of the four setup transactions under Sepolia's schedule (deployment 21.69 M, createDID 3.01 M and 2.14 M,
+// revokeCredential 0.14 M, together 26.98 M; results/README.md), rounded up.
 const GAS_BUDGET = 28000000;
 const REASON_PRIVILEGE_WITHDRAWN = 9;
 const ALLOWED_CHAINS = new Set([R.SEPOLIA.chainId, 1337, 31337]);
 
 const fail = (code) => Object.assign(new Error(code), { code });
 
-function arg(name, fallback = null) {
-  const i = process.argv.indexOf(name);
-  return i >= 0 ? process.argv[i + 1] : fallback;
-}
-const flag = (name) => process.argv.includes(name);
 
 // Fees are set explicitly. Without overrides, ethers v5 adds a fixed 1.5 gwei priority fee; under the gas schedule
 // Sepolia has used since 6 Oct 2026 the setup uses about 27 million gas, which at that tip would cost about
@@ -214,9 +210,10 @@ async function main() {
       if (receipt) return finish(name, receipt, isDone);
       const latest = await provider.getTransactionCount(wallet.address, 'latest');
       if (latest > pending.nonce) {
-        // The nonce is used; give the node a moment to show the receipt of one of our transactions.
+        // The nonce is used; give the node a moment (up to 30 s, or the wait timeout if shorter) to show the receipt
+        // of one of our transactions.
         for (let i = 0; i < 10; i++) {
-          await sleep(3000);
+          await sleep(Math.min(30000, waitTimeoutMs) / 10);
           const late = await minedReceipt(pending);
           if (late) return finish(name, late, isDone);
         }
@@ -234,7 +231,16 @@ async function main() {
       beforeSend(pending);
       save();
     }
-    const request = await wallet.populateTransaction(await buildTx({ ...(await fees.overrides(provider)), nonce: pending.nonce }));
+    // A replacement (--resend) must pay at least 10% more than the transaction it replaces, in both fee fields, or nodes
+    // refuse it as underpriced; it pays the current policy or 12.5% more than the last signed one, whichever is higher.
+    const overrides = await fees.overrides(provider);
+    if (pending.fees) {
+      const bumped = (v) => ethers.BigNumber.from(v).mul(1125).div(1000).add(1);
+      const max = (a, b) => (a.gt(b) ? a : b);
+      overrides.maxFeePerGas = max(overrides.maxFeePerGas, bumped(pending.fees.maxFeePerGas));
+      overrides.maxPriorityFeePerGas = max(overrides.maxPriorityFeePerGas, bumped(pending.fees.maxPriorityFeePerGas));
+    }
+    const request = await wallet.populateTransaction(await buildTx({ ...overrides, nonce: pending.nonce }));
     const signed = await wallet.signTransaction(request);
     const hash = ethers.utils.keccak256(signed);
     pending.hashes.push(hash);

@@ -20,6 +20,7 @@ const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { ethers } = require('ethers');
 const R = require('./lib/rpc');
+const { arg, flag } = require('./lib/cli');
 const M = require('./lib/sepolia-modes');
 const { CredentialVerifierService } = require('../src/vc/verifier-service');
 
@@ -40,11 +41,6 @@ function commitDescribe() {
   }
 }
 
-function arg(name, fallback = null) {
-  const i = process.argv.indexOf(name);
-  return i >= 0 ? process.argv[i + 1] : fallback;
-}
-const flag = (name) => process.argv.includes(name);
 const sleep = (t) => new Promise((resolve) => setTimeout(resolve, t));
 
 function slotDate(hhmm) {

@@ -20,13 +20,15 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
 - The authentication methods are no longer stored: `getDIDDocument` returns the verification methods in that field,
   so `rotateKey` and `updateDID` change both. In version 1.0.0 the stored authentication methods kept the original
   keys.
+- `revokeCredential` refuses an empty credential ID ("DIDRegistry: Invalid credential ID"); the verifier already
+  rejected credentials without an ID.
 - A revocation entry is stored in one slot (time, reason code, flag); `getRevocationEntry` returns the credential ID
   it was asked about, and an empty entry for a credential that is not revoked. The return types are unchanged. The
   `active` flag shares a storage slot with the controller.
 - Gas (osaka). With version 1.0.0's placeholder inputs, `createDID` uses 279,772 gas (346,878 in version 1.0.0) and
-  `revokeCredential` 56,016 (171,188 with a 30-character text reason). With realistic documents (one Ed25519 Multikey
+  `revokeCredential` 56,042 (171,188 with a 30-character text reason). With realistic documents (one Ed25519 Multikey
   verification method): `createDID` 640,821 for a controller's first DID and 466,991 for its second,
-  `revokeCredential` 56,765. The deployment uses 3,049,411 gas for 13,660 bytes of code (version 1.0.0: 2,802,701 on
+  `revokeCredential` 56,791. The deployment uses 3,069,348 gas for 13,752 bytes of code (version 1.0.0: 2,802,701 on
   Sepolia); the handover functions make the code larger.
 - Administrator actions emit events: `AdminAdded`, `AdminRemoved`, `Paused`, `Unpaused`.
 - The contract description (NatSpec) states what the registry does and what a pause blocks.
@@ -85,6 +87,8 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   `SERVER_ERROR` or `CALL_EXCEPTION`. Both now walk the causes that ethers keeps and log codes such as
   `SERVER_ERROR/HTTP_429` or `CALL_EXCEPTION/SERVER_ERROR/RPC_-32000/BLOCK_UNAVAILABLE` (the last when the node
   reports a missing block); only codes are written, never messages.
+- `deploy-sepolia.js --resend` signed the replacement at the current fees, which nodes refuse as underpriced when the
+  base fee has not risen; it now pays at least 12.5% more than the transaction it replaces.
 - `deploy-sepolia.js` checked for a fixed 0.02 SepoliaETH, less than the setup can cost at the highest base fee it
   accepts; it now requires 28 million gas at the highest fee it may pay (default maximum base fee 0.5 gwei).
 
@@ -97,7 +101,8 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   `deploy-sepolia.js` (setup with explicit fees; each step's nonce and hash are saved, so a re-run never sends a
   second transaction for a step; it checks chain, code, DID ownership and the issuer key before writing), `analyze-latency.js` and `scripts/lib/stats.js` (one
   definition per statistic), `check_stats_numpy.py`, `plot-latency.py`.
-- Hardhat's hard fork is pinned to osaka.
+- Hardhat's hard fork is pinned to osaka. The Hardhat plugins are development dependencies (only `ethers` is needed
+  at run time), and `package.json` requires Node.js 20 or later.
 - No Hardhat network for Sepolia and no private key in the environment: the Sepolia scripts run with plain Node, read
   only `SEPOLIA_RPC_URL`, and take the deployer key from a file given on the command line. `dotenv` is no longer a
   dependency, and `npm run deploy:sepolia` is gone.
@@ -110,8 +115,9 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
   the first and second halves of each, and headers that disagree; `measure-local.js` runs 100 warm-up verifications
   per process (10 before) and records whether the checkout differs from its commit; `measure-sepolia.js` takes
   `--timeout-ms` and records the commit. `requirements.txt` lists the Python packages.
-- Tests: 151 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3), leak tests of
-  the Sepolia scripts, and a check that the gas tables in the READMEs match the measurement.
+- Tests: 160 (47 in version 1.0.0), including the W3C `eddsa-jcs-2022` test vector (appendix B.3), leak tests of
+  the Sepolia scripts, runs of `deploy-sepolia.js` against a local node (fresh, completed, refused and interrupted
+  runs), and a check that the gas figures in the READMEs and this file match the measurement.
 
 ## 1.0.0 (24 July 2026)
 

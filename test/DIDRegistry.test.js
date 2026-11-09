@@ -615,6 +615,42 @@ describe("DIDRegistry", function () {
     });
   });
 
+  describe("Event arguments and empty credential IDs", function () {
+    const didId = "did:example:events";
+    const dataHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("events"));
+    const topic = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(didId));
+    const eventOf = (receipt, name) => receipt.events.find((e) => e.event === name);
+    const blockTime = async (receipt) => (await ethers.provider.getBlock(receipt.blockNumber)).timestamp;
+
+    beforeEach(async function () {
+      await didRegistry.connect(user1).createDID(didId, ["key1"], [], dataHash);
+    });
+
+    it("emits DIDDeactivated with the DID, the controller and the time", async function () {
+      const receipt = await (await didRegistry.connect(user1).deactivateDID(didId)).wait();
+      const e = eventOf(receipt, "DIDDeactivated");
+      expect(e.args[0].hash).to.equal(topic);
+      expect(e.args[1]).to.equal(user1.address);
+      expect(e.args[2].toNumber()).to.equal(await blockTime(receipt));
+    });
+
+    it("emits CredentialRevoked with the DID, the credential ID, the reason code and the time", async function () {
+      const credentialId = "urn:uuid:00000000-0000-4000-8000-000000000001";
+      const receipt = await (await didRegistry.connect(user1).revokeCredential(didId, credentialId, 4)).wait();
+      const e = eventOf(receipt, "CredentialRevoked");
+      expect(e.args[0].hash).to.equal(topic);
+      expect(e.args[1].hash).to.equal(ethers.utils.keccak256(ethers.utils.toUtf8Bytes(credentialId)));
+      expect(e.args[2]).to.equal(4);
+      expect(e.args[3].toNumber()).to.equal(await blockTime(receipt));
+    });
+
+    it("refuses to revoke an empty credential ID", async function () {
+      await expect(didRegistry.connect(user1).revokeCredential(didId, "", 0)).to.be.revertedWith(
+        "DIDRegistry: Invalid credential ID"
+      );
+    });
+  });
+
   describe("Revocation reason codes", function () {
     const didId = "did:example:reason-codes";
 

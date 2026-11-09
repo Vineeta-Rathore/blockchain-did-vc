@@ -309,6 +309,28 @@ describe('DID and VC credential flow', function () {
       expect((await verifierService.verifyCredential(badFrom)).reason).to.equal('MALFORMED_CREDENTIAL');
     });
 
+    it('applies the boundaries exactly: validFrom up to now plus the tolerance, validUntil later than now', async function () {
+      // Date.now is stubbed only while verifying, so "now" is the same millisecond in every case.
+      const T = Date.now();
+      const at = (ms) => new Date(ms).toISOString();
+      const cases = [
+        [{ validFrom: at(T + 60000) }, 'VALID'],
+        [{ validFrom: at(T + 60001) }, 'CREDENTIAL_NOT_YET_VALID'],
+        [{ validFrom: at(T - 1000), validUntil: at(T + 1) }, 'VALID'],
+        [{ validFrom: at(T - 1000), validUntil: at(T) }, 'CREDENTIAL_EXPIRED'],
+      ];
+      for (const [dates, expected] of cases) {
+        const credential = issueCredential(dates);
+        const realNow = Date.now;
+        Date.now = () => T;
+        try {
+          expect((await verifierService.verifyCredential(credential)).reason, JSON.stringify(dates)).to.equal(expected);
+        } finally {
+          Date.now = realNow;
+        }
+      }
+    });
+
     it('fails with MALFORMED_CREDENTIAL when validUntil is earlier than validFrom', async function () {
       const credential = issueCredential({ validFrom: '2026-01-02T00:00:00Z', validUntil: '2026-01-01T00:00:00Z' });
       expect((await verifierService.verifyCredential(credential)).reason).to.equal('MALFORMED_CREDENTIAL');

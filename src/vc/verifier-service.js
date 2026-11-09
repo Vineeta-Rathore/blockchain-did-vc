@@ -104,6 +104,11 @@ class CredentialVerifierService {
       mark = now;
     };
     const done = (valid, reason) => this.result(valid, reason, credential, checkedAt, checkedAtBlock, timings);
+    // A failed check: the step's time is recorded, then the result is returned.
+    const fail = (name, reason) => {
+      step(name);
+      return done(false, reason);
+    };
 
     try {
       // V1: structure and validity dates. Revocation is keyed by the credential id, so a credential without a
@@ -111,8 +116,7 @@ class CredentialVerifierService {
       if (!credential || typeof credential.id !== 'string' || credential.id === '' ||
           typeof credential.issuer !== 'string' || credential.issuer === '' ||
           typeof credential.credentialSubject?.id !== 'string' || credential.credentialSubject.id === '') {
-        step('V1');
-        return done(false, 'MALFORMED_CREDENTIAL');
+        return fail('V1', 'MALFORMED_CREDENTIAL');
       }
       // VC 2.0 (sections 4.3 and 4.5): the base context comes first and the type includes VerifiableCredential.
       // The VC 1.1 date properties are rejected rather than ignored, so a VC 1.1 expiry cannot be skipped.
@@ -120,19 +124,16 @@ class CredentialVerifierService {
       const types = Array.isArray(credential.type) ? credential.type : [credential.type];
       if (contexts[0] !== VC_V2_CONTEXT || !types.includes('VerifiableCredential') ||
           credential.issuanceDate !== undefined || credential.expirationDate !== undefined) {
-        step('V1');
-        return done(false, 'MALFORMED_CREDENTIAL');
+        return fail('V1', 'MALFORMED_CREDENTIAL');
       }
       if (!credential.proof?.verificationMethod) {
-        step('V1');
-        return done(false, 'MISSING_PROOF');
+        return fail('V1', 'MISSING_PROOF');
       }
       const { validFrom, validUntil } = credential;
       if ((validFrom !== undefined && !isValidDate(validFrom)) ||
           (validUntil !== undefined && !isValidDate(validUntil)) ||
           (validFrom !== undefined && validUntil !== undefined && Date.parse(validUntil) < Date.parse(validFrom))) {
-        step('V1');
-        return done(false, 'MALFORMED_CREDENTIAL');
+        return fail('V1', 'MALFORMED_CREDENTIAL');
       }
       step('V1');
 
@@ -160,35 +161,30 @@ class CredentialVerifierService {
 
       // V2: issuer DID exists and is active
       if (!(await this.didRegistry.verifyDID(issuerDid, at))) {
-        step('V2');
-        return done(false, 'ISSUER_DID_INACTIVE_OR_UNKNOWN');
+        return fail('V2', 'ISSUER_DID_INACTIVE_OR_UNKNOWN');
       }
       step('V2');
 
       // V3: subject DID exists and is active
       if (!(await this.didRegistry.verifyDID(subjectDid, at))) {
-        step('V3');
-        return done(false, 'SUBJECT_DID_INACTIVE_OR_UNKNOWN');
+        return fail('V3', 'SUBJECT_DID_INACTIVE_OR_UNKNOWN');
       }
       step('V3');
 
       // V4: validity period (validFrom with the clock tolerance, then validUntil)
       const now = nowMs;
       if (validFrom !== undefined && Date.parse(validFrom) > now + this.clockToleranceMs) {
-        step('V4');
-        return done(false, 'CREDENTIAL_NOT_YET_VALID');
+        return fail('V4', 'CREDENTIAL_NOT_YET_VALID');
       }
       if (validUntil !== undefined && Date.parse(validUntil) <= now) {
-        step('V4');
-        return done(false, 'CREDENTIAL_EXPIRED');
+        return fail('V4', 'CREDENTIAL_EXPIRED');
       }
       step('V4');
 
       // V5: issuer document at the same block; it must be active and be the issuer's own document
       const issuerDocument = await this.didRegistry.getDIDDocument(issuerDid, at);
       if (!issuerDocument || issuerDocument.active !== true || issuerDocument.id !== issuerDid) {
-        step('V5');
-        return done(false, 'ISSUER_DID_INACTIVE_OR_UNKNOWN');
+        return fail('V5', 'ISSUER_DID_INACTIVE_OR_UNKNOWN');
       }
       // The method must be a Multikey of the issuer: controlled by the issuer DID and named under it. The registry has
       // no assertionMethod relationship, so any such method of the issuer can sign credentials.
@@ -198,8 +194,7 @@ class CredentialVerifierService {
       );
       if (!verificationMethod || verificationMethod.type !== 'Multikey' || verificationMethod.controller !== issuerDid ||
           typeof verificationMethod.id !== 'string' || !verificationMethod.id.startsWith(`${issuerDid}#`)) {
-        step('V5');
-        return done(false, 'VERIFICATION_METHOD_NOT_FOUND');
+        return fail('V5', 'VERIFICATION_METHOD_NOT_FOUND');
       }
       step('V5');
 
@@ -210,15 +205,13 @@ class CredentialVerifierService {
           proof.proofPurpose !== 'assertionMethod' ||
           (proof.expires !== undefined && (!isValidDate(proof.expires) || Date.parse(proof.expires) <= now)) ||
           !VerifiableCredentialService.verifyProof(credential, verificationMethod.publicKeyMultibase)) {
-        step('V6');
-        return done(false, 'INVALID_SIGNATURE');
+        return fail('V6', 'INVALID_SIGNATURE');
       }
       step('V6');
 
       // V7: revocation, at the same block
       if (await this.didRegistry.isCredentialRevoked(issuerDid, credentialId, at)) {
-        step('V7');
-        return done(false, 'CREDENTIAL_REVOKED');
+        return fail('V7', 'CREDENTIAL_REVOKED');
       }
       step('V7');
 

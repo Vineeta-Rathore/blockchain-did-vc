@@ -547,6 +547,7 @@ contract DIDRegistry {
         didExists(_didId)
         onlyController(_didId)
     {
+        require(bytes(_credentialId).length > 0, "DIDRegistry: Invalid credential ID");
         require(_isValidReasonCode(_reasonCode), "DIDRegistry: Invalid reason code");
         require(
             !revocations[_didId][_credentialId].isRevoked,

@@ -1,0 +1,217 @@
+# npm test at commit 73b4cca16e7c390e4ff487c0b3f0a65af1519c7f, 2026-11-15 12:11:24 +0530, node v22.10.0
+
+
+  latency analysis: only successful measurements are counted
+    ✔ excludes failed and pilot rows from every Sepolia statistic and reports them (62ms)
+    ✔ flags successful rows with unexpected request counts or a chain-ID request (41ms)
+    ✔ excludes local rows that are not valid
+    ✔ refuses to summarise values that are not finite numbers
+
+  deploy-sepolia.js: fresh runs, re-runs and interrupted runs (local Hardhat node)
+    ✔ completes a fresh run, and leaves a completed record and the chain untouched on a re-run (1890ms)
+    ✔ refuses a locked record, a record of another deployer, and a record that the chain contradicts (2952ms)
+    ✔ after a transaction was dropped before it was mined, broadcasts the saved transaction again and completes (4428ms)
+    ✔ with --resend, replaces a stuck transaction at higher fees and records the one that was mined (7932ms)
+    ✔ after a stop before signing (base fee too high), completes on a plain re-run (1376ms)
+    ✔ refuses invalid numbers for the wait timeout and the fees (2386ms)
+    ✔ refuses a replacement whose fee would exceed the policy ceiling (2 x maximum base fee + tip) (4158ms)
+    ✔ stops when the saved nonce was used by a transaction it did not send (5180ms)
+
+  DIDRegistry
+    Deployment
+      ✔ Should set the deployer as admin
+      ✔ Should have correct initial state
+      ✔ Should set deployer as owner
+    DID Creation
+      ✔ Should create a new DID successfully (64ms)
+      ✔ Should prevent duplicate DID creation (104ms)
+      ✔ Should handle multiple DIDs from same user (86ms)
+    DID Updates
+      ✔ Should allow controller to update DID (89ms)
+      ✔ Should prevent unauthorized updates
+      ✔ Should prevent non-controller from deactivating DID
+    DID Verification
+      ✔ Should return false for non-existent DID
+      ✔ Should return true for active DID (50ms)
+      ✔ Should return false for deactivated DID (75ms)
+    Controller Management
+      ✔ Should transfer DID control in two steps: proposal, then acceptance by the new address (159ms)
+      ✔ Should get DIDs by controller (57ms)
+      ✔ Should prevent non-controller from transferring DID control
+    Two-step controller handover
+      ✔ emits the proposal with the DID, the controller and the proposed address (56ms)
+      ✔ moves control, the reverse lookup and the nonce only on acceptance, and emits ControllerChanged (149ms)
+      ✔ lets the old controller act until acceptance, and only the new one after it (168ms)
+      ✔ refuses acceptance by any other address, without a proposal, and a second time (105ms)
+      ✔ refuses the zero address and the current controller as proposals
+      ✔ replaces an earlier proposal with a later one (90ms)
+      ✔ emits a cancellation for the address an earlier proposal named when a later proposal replaces it (127ms)
+      ✔ keeps a pending proposal through updateDID and rotateKey (137ms)
+      ✔ names the controller in the cancellation that deactivation emits (87ms)
+      ✔ keeps every DID exactly once in its controller's list over chains of handovers, also back to an earlier controller (435ms)
+      ✔ lets only the controller cancel a proposal, and emits the cancellation (158ms)
+      ✔ drops a pending proposal when the DID is deactivated, so it cannot be accepted after reactivation (90ms)
+      ✔ blocks proposal and acceptance while paused, but not cancellation (182ms)
+    Storage without copies (ABI unchanged)
+      ✔ returns the verification methods as the authentication methods after create, update and rotation (118ms)
+      ✔ returns an empty entry for a credential that is not revoked (53ms)
+      ✔ stores a revocation in a single new storage slot (102ms)
+    Key Rotation
+      ✔ Should rotate verification key (80ms)
+      ✔ Should prevent non-controller from rotating verification key (41ms)
+      ✔ Should keep the authentication methods in step with the verification methods, also with duplicate keys (53ms)
+      ✔ Should emit KeyRotated with the DID, the old key and the new key (66ms)
+      ✔ Should reject a key index outside the list (58ms)
+    Revocation Registry
+      ✔ Should revoke a credential (84ms)
+      ✔ Should not revoke same credential twice (73ms)
+      ✔ Should allow credential revocation after issuer DID is deactivated (101ms)
+      ✔ Should revert when revoking credential on non-existent DID
+    Admin Functions
+      ✔ Should allow admin to add new admin (51ms)
+      ✔ Should prevent non-admin from adding admin
+      ✔ Should allow admin to pause contract
+      ✔ Should prevent non-admin from pausing contract
+      ✔ Should revert DID creation when contract is paused
+    Pause scope
+      ✔ lets the controller revoke a credential while paused (52ms)
+      ✔ lets the controller deactivate a DID while paused (52ms)
+      ✔ blocks every other write while paused (133ms)
+      ✔ does not let the owner or another account revoke or deactivate someone else's DID (68ms)
+      ✔ keeps the read functions answering while paused (101ms)
+    Event arguments and empty credential IDs
+      ✔ emits DIDDeactivated with the DID, the controller and the time (60ms)
+      ✔ emits CredentialRevoked with the DID, the credential ID, the reason code and the time (51ms)
+      ✔ refuses to revoke an empty credential ID
+    Revocation reason codes
+      ✔ stores, returns and emits each accepted RFC 5280 code (560ms)
+      ✔ rejects codes 6, 7, 8, 11 and 255 (86ms)
+    Admin events
+      ✔ emits an event for each admin action, naming the caller (183ms)
+    Repair while deactivated
+      ✔ rotates a key on a deactivated DID, which stays deactivated (84ms)
+      ✔ updates a deactivated DID, which stays deactivated, and syncs its authentication keys (56ms)
+      ✔ removes a rotated key from both key lists (51ms)
+      ✔ still refuses a controller change on a deactivated DID
+      ✔ keeps revocations made while deactivated after reactivation (116ms)
+    Gas Optimization
+Gas used for DID creation: 279772
+      ✔ Should use reasonable gas for DID creation (50ms)
+    Edge Cases
+      ✔ Should handle empty verification methods (49ms)
+      ✔ Should handle long DID strings
+      ✔ Should reactivate deactivated DID (118ms)
+
+  Gas schedule (osaka on Hardhat, Glamsterdam on Sepolia)
+    ✔ reproduces the Sepolia gas of all four operations from the local storage writes (366ms)
+    ✔ prices one new storage slot at 64 bytes of state and returns null for writes it does not model
+    ✔ matches the gas figures of README.md, results/README.md and CHANGELOG.md (87ms)
+
+  harness: connections, mode order, intervals and arguments
+    connections
+      ✔ installs keep-alive agents with first-in-first-out reuse and a long idle timeout
+      ✔ counts new sockets and reuses all of them afterwards, also those opened by concurrent requests
+      ✔ records the new sockets opened inside the timer on every measured row (41ms)
+    error codes
+      ✔ names a block failure in every mode, with codes only
+      ✔ names a 429 failure in every mode, with codes only
+      ✔ names a 429-retry-after failure in every mode, with codes only
+      ✔ names a 500 failure in every mode, with codes only
+      ✔ turns nested JSON-RPC numbers and HTTP statuses into RPC_<n> and HTTP_<n>
+    mode order
+      ✔ uses each order 25 times over ten blocks, and gives a block run alone the same orders as in the full run
+    intervals over clusters
+      ✔ gives an order-statistic interval of the cluster medians with its exact coverage
+      ✔ reports per-process medians, an interval over processes, drift between halves and header mismatches
+      ✔ pairs Sepolia rows within one run and block, reports new sockets by mode and order, and gives block intervals (43ms)
+    arguments and exit
+      ✔ names a missing --log and an invalid --block-lag or --timeout-ms (2822ms)
+
+  leak tests: RPC failures never reveal the URL and are never retried
+    ✔ 429: every mode fails cleanly, without retries, and its raw row holds only codes (1277ms)
+    ✔ 500: every mode fails cleanly, without retries, and its raw row holds only codes (1266ms)
+    ✔ timeout: every mode fails cleanly, without retries, and its raw row holds only codes (4291ms)
+    ✔ drop: every mode fails cleanly, without retries, and its raw row holds only codes (1254ms)
+    ✔ call-429: every mode fails cleanly, without retries, and its raw row holds only codes (1251ms)
+    ✔ call-500: every mode fails cleanly, without retries, and its raw row holds only codes (1274ms)
+    ✔ call-timeout: every mode fails cleanly, without retries, and its raw row holds only codes (3806ms)
+    ✔ call-drop: every mode fails cleanly, without retries, and its raw row holds only codes (1275ms)
+    ✔ the redactor keeps only the scheme and host of any URL
+    ✔ the writer refuses to write a secret key field
+    the scripts themselves, run as child processes
+      ✔ measure-sepolia.js --pilot, 500: output and log hold no token or path (343ms)
+      ✔ deploy-sepolia.js, 500: output and files hold no token, path or key (381ms)
+      ✔ measure-sepolia.js --pilot, call-429: output and log hold no token or path (442ms)
+      ✔ deploy-sepolia.js, call-429: output and files hold no token, path or key (441ms)
+
+  RPC helpers: what counts as a secret
+    ✔ keeps ordinary words of a URL, so rows and records keep their own fields
+    ✔ removes tokens in the path, the query and the host name
+    ✔ removes user information from any URL
+    ✔ matches a hex key in either case, with or without 0x
+    ✔ reads only the URL from the env line, without quotes or an inline comment
+    ✔ reports a self-scan hit with its code
+
+  DID and VC credential flow
+    ✔ verifies a valid Ed25519-signed VC successfully
+    ✔ uses a W3C Ed25519 multikey value with 0xed01 prefix and 32-byte raw key
+    ✔ uses a W3C Ed25519 secret multikey value with 0x8026 prefix and 32-byte raw key
+    ✔ fails when the credential subject is tampered (52ms)
+    ✔ fails when the issuer DID is tampered
+    ✔ fails when the credential is signed with the wrong issuer key (39ms)
+    ✔ fails when the credential has expired
+Gas used for credential revocation: 55994
+    ✔ fails when the credential is revoked on-chain (86ms)
+    ✔ fails when the issuer DID is inactive
+    ✔ fails when the subject DID is inactive (51ms)
+    ✔ documents duplicate credential ID behavior through the revocation registry (164ms)
+    ✔ rejects duplicate revocation attempts (49ms)
+    ✔ prevents non-controller credential revocation
+    ✔ fails on a malformed credential missing required fields
+    ✔ fails with MALFORMED_CREDENTIAL when a validly signed credential has no usable id (revocation is keyed by it)
+    ✔ fails when the issuer verification method has been rotated off the DID document (67ms)
+    ✔ fails when the proof configuration is tampered after signing (52ms)
+    ✔ verifies the same credential 100 times in a row (functional check; timing lives in scripts/measure-local.js) (5289ms)
+    validity period
+      ✔ fails with CREDENTIAL_NOT_YET_VALID when validFrom is beyond the clock tolerance
+      ✔ accepts a validFrom inside the clock tolerance (50ms)
+      ✔ fails with MALFORMED_CREDENTIAL on an unparsable timestamp
+      ✔ applies the boundaries exactly: validFrom up to now plus the tolerance, validUntil later than now (185ms)
+      ✔ fails with MALFORMED_CREDENTIAL when validUntil is earlier than validFrom
+    strict input checks
+      ✔ requires the VC 2.0 base context first and the VerifiableCredential type
+      ✔ rejects the VC 1.1 date properties instead of ignoring them
+      ✔ accepts only date-time stamps with a time zone (65ms)
+      ✔ rejects verifier options that would turn a check off
+      ✔ returns INVALID_BLOCK_TAG for a block tag that is not a non-negative integer
+      ✔ rejects an oversized proof value without decoding it
+      ✔ rejects @context entries appended after signing (53ms)
+      ✔ rejects a proof whose expires time has passed (106ms)
+      ✔ accepts only Multikey verification methods of the issuer, named under its DID (132ms)
+      ✔ rejects impossible calendar dates and times (53ms)
+      ✔ requires the issuer and the subject id to be strings
+      ✔ judges the validity period at the moment reported as checkedAt (38ms)
+      ✔ reads the newest block number with a plain eth_blockNumber request
+      ✔ issues only JSON values and refuses lone surrogates
+      ✔ rejects a public key without the multibase z prefix
+    per-step timing
+      ✔ gives the same results with timing on and off (285ms)
+    same-block reads
+      ✔ pins all four reads to one block and reports it (52ms)
+      ✔ pins to the block below the newest with blockLag 1 (66ms)
+      ✔ answers as of the pinned block on the chain (117ms)
+      ✔ rejects at V5 when the issuer document is inactive although verifyDID said active (49ms)
+      ✔ returns an error code, never the error message, when a read fails
+    eddsa-jcs-2022 proofs
+      ✔ reproduces the W3C test vector (B.3) and verifies it
+      ✔ puts the document @context into the proof of an issued credential
+      ✔ fails when the document @context differs from the proof @context (48ms)
+      ✔ fails when proof.type is Ed25519Signature2020
+      ✔ fails when proof.cryptosuite is eddsa-rdfc-2022 (51ms)
+      ✔ fails when proof.proofPurpose is authentication (42ms)
+      ✔ still verifies a credential signed the version 1.0.0 way (no proof @context) (51ms)
+
+
+  164 passing (1m)
+
+# exit code: 0

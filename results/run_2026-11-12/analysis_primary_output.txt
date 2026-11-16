@@ -1,0 +1,99 @@
+checker SHA-256 a067de485a4f6e77c79f4b247371e1612d47f610efd5da43b4a492f18f542eec; log SHA-256 f55e20ceb868b0d20a4739043d4c43edb476b9e2acab7f210ff16cb737d543be
+verdict evaluated_at: 2026-11-12T15:07:54.045Z, clock_override: false
+== primary cluster table ==
+block | used cluster | run kind | started_at (UTC) | network_state | excluded | covered
+1 | main | main | 2026-11-12T02:30:00.003Z | SAME | false | true
+2 | main | main | 2026-11-12T03:50:00.008Z | SAME | false | true
+3 | main | main | 2026-11-12T05:10:00.011Z | SAME | false | true
+4 | main | main | 2026-11-12T06:30:00.011Z | SAME | false | true
+5 | main | main | 2026-11-12T07:50:00.012Z | SAME | false | true
+6 | main | main | 2026-11-12T09:10:00.015Z | SAME | false | true
+7 | main | main | 2026-11-12T10:30:00.015Z | SAME | false | true
+8 | main | main | 2026-11-12T11:50:00.002Z | SAME | false | true
+9 | main | main | 2026-11-12T13:10:00.017Z | SAME | false | true
+10 | main | main | 2026-11-12T14:30:00.003Z | SAME | false | true
+gates: 0 failed; footers: present for every invocation; monitor: run_monitor.jsonl ad1db559e6da
+day rule (from the verdict): 10 of 10 slots covered; usable timed rows in the primary P 100, S 100, C 100, Bt 100: the day stands
+
+== monitor notes (tabulated before any latency is shown; never a reason to exclude or explain a row) ==
+main invocation 2026-11-12T02:10:41.036Z, block 1: 6423 KB received in the minute of a tick (note only)
+network identity (from the monitor): 0 of 742 ticks show another network than the first comparable baseline tick
+
+== rows: usable, attempted, error rows by code (primary dataset; n = 100 per mode is the planned size only) ==
+P: 100 usable of 100 attempted timed rows in 10 blocks; error rows: none; not usable without an error code (P not valid, S, C or Bt reads not as expected): 0; rows over 10 s: 0
+S: 100 usable of 100 attempted timed rows in 10 blocks; error rows: none; not usable without an error code (P not valid, S, C or Bt reads not as expected): 0; rows over 10 s: 0
+C: 100 usable of 100 attempted timed rows in 10 blocks; error rows: none; not usable without an error code (P not valid, S, C or Bt reads not as expected): 0; rows over 10 s: 0
+Bt: 100 usable of 100 attempted timed rows in 10 blocks; error rows: none; not usable without an error code (P not valid, S, C or Bt reads not as expected): 0; rows over 10 s: 0
+
+== primary analysis: one cluster per slot, every usable timed row ==
+Intervals are the range between the blocks of one day (order statistics of the block medians), not confidence intervals for the latency; the pooled interval treats rows as independent.
+P: pooled median 616.6 ms; median of block medians 619.0 ms; range between blocks [606.3, 634.7] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); pooled interval, rows taken as independent [612.4, 629.3]; p95 682.9, max 3108.3; 0 block(s) with fewer than 5 usable rows
+S: pooled median 505.3 ms; median of block medians 503.8 ms; range between blocks [490.3, 513.1] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); pooled interval, rows taken as independent [500.1, 510.5]; p95 549.4, max 587.2; 0 block(s) with fewer than 5 usable rows
+C: pooled median 151.4 ms; median of block medians 150.5 ms; range between blocks [143.4, 163.2] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); pooled interval, rows taken as independent [148.0, 155.4]; p95 192.3, max 232.5; 0 block(s) with fewer than 5 usable rows
+Bt: pooled median 143.7 ms; median of block medians 142.1 ms; range between blocks [137.7, 152.5] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); pooled interval, rows taken as independent [140.0, 147.4]; p95 171.1, max 238.4; 0 block(s) with fewer than 5 usable rows
+S over C (paired per iteration): n = 100 usable pairs of 100 attempted, pooled median 3.318, median of block medians 3.310, bootstrap interval [3.214, 3.385] (pairs taken as independent; seed 20261111), range between blocks [3.050, 3.510] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%)
+  paired clusters below five: 0
+S over Bt (paired per iteration): n = 100 usable pairs of 100 attempted, pooled median 3.491, median of block medians 3.488, bootstrap interval [3.420, 3.533] (pairs taken as independent; seed 20261111), range between blocks [3.414, 3.581] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%)
+  paired clusters below five: 0
+P minus its own block-number read minus S (paired per iteration, ms): n = 100 usable pairs of 100 attempted, pooled median 2.9, median of block medians -3.3, bootstrap interval [-4.6, 8.3] (pairs taken as independent; seed 20261111), range between blocks [-11.9, 19.1] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%)
+  paired clusters below five: 0
+cold start (descriptive, 10 of 10 blocks): median 585.2 ms, from 460.8 to 1388.9 ms
+cache check (descriptive, n = 10 blocks; the fresh read is always timed first and the known read second, not counterbalanced): fresh median 126.8 ms, known 118.7 ms, paired difference 2.0 ms
+drift (read only as one pooled count): the first half of the timed iterations is slower in 23 of 40 block-mode pairs
+rows whose timer opened a new connection, by mode and order: {}
+C against Bt is descriptive only: the four orders are a cyclic Latin square that does not balance which mode precedes which.
+
+== sensitivity analyses, always shown beside the primary ==
+S1, every cluster of the log (repetitions added): 10 blocks
+  P error rows: none; not usable without an error code: 0
+  P: 100 usable of 100, median 616.6 ms, range between blocks [606.3, 634.7] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); descriptive containment: inside the primary range; containment is not equivalence
+  S error rows: none; not usable without an error code: 0
+  S: 100 usable of 100, median 505.3 ms, range between blocks [490.3, 513.1] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); descriptive containment: inside the primary range; containment is not equivalence
+  C error rows: none; not usable without an error code: 0
+  C: 100 usable of 100, median 151.4 ms, range between blocks [143.4, 163.2] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); descriptive containment: inside the primary range; containment is not equivalence
+  Bt error rows: none; not usable without an error code: 0
+  Bt: 100 usable of 100, median 143.7 ms, range between blocks [137.7, 152.5] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); descriptive containment: inside the primary range; containment is not equivalence
+  S/C: n = 100 usable pairs of 100 attempted, median 3.318; range between blocks [3.050, 3.510] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%)
+  paired clusters below five: 0
+  S/Bt: n = 100 usable pairs of 100 attempted, median 3.491; range between blocks [3.414, 3.581] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%)
+  paired clusters below five: 0
+  P-B0-S: n = 100 usable pairs of 100 attempted, median 2.9; range between blocks [-11.9, 19.1] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%)
+  paired clusters below five: 0
+S2, clusters the checker calls clean (a clean repetition replaces its failed original): 10 blocks
+  P error rows: none; not usable without an error code: 0
+  P: 100 usable of 100, median 616.6 ms, range between blocks [606.3, 634.7] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); descriptive containment: inside the primary range; containment is not equivalence
+  S error rows: none; not usable without an error code: 0
+  S: 100 usable of 100, median 505.3 ms, range between blocks [490.3, 513.1] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); descriptive containment: inside the primary range; containment is not equivalence
+  C error rows: none; not usable without an error code: 0
+  C: 100 usable of 100, median 151.4 ms, range between blocks [143.4, 163.2] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); descriptive containment: inside the primary range; containment is not equivalence
+  Bt error rows: none; not usable without an error code: 0
+  Bt: 100 usable of 100, median 143.7 ms, range between blocks [137.7, 152.5] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); descriptive containment: inside the primary range; containment is not equivalence
+  S/C: n = 100 usable pairs of 100 attempted, median 3.318; range between blocks [3.050, 3.510] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%)
+  paired clusters below five: 0
+  S/Bt: n = 100 usable pairs of 100 attempted, median 3.491; range between blocks [3.414, 3.581] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%)
+  paired clusters below five: 0
+  P-B0-S: n = 100 usable pairs of 100 attempted, median 2.9; range between blocks [-11.9, 19.1] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%)
+  paired clusters below five: 0
+S3, primary without rows whose timer opened a new connection: 10 blocks
+  P error rows: none; not usable without an error code: 0
+  P: 100 usable of 100, median 616.6 ms, range between blocks [606.3, 634.7] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); descriptive containment: inside the primary range; containment is not equivalence
+  S error rows: none; not usable without an error code: 0
+  S: 100 usable of 100, median 505.3 ms, range between blocks [490.3, 513.1] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); descriptive containment: inside the primary range; containment is not equivalence
+  C error rows: none; not usable without an error code: 0
+  C: 100 usable of 100, median 151.4 ms, range between blocks [143.4, 163.2] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); descriptive containment: inside the primary range; containment is not equivalence
+  Bt error rows: none; not usable without an error code: 0
+  Bt: 100 usable of 100, median 143.7 ms, range between blocks [137.7, 152.5] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%); descriptive containment: inside the primary range; containment is not equivalence
+  S/C: n = 100 usable pairs of 100 attempted, median 3.318; range between blocks [3.050, 3.510] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%)
+  paired clusters below five: 0
+  S/Bt: n = 100 usable pairs of 100 attempted, median 3.491; range between blocks [3.414, 3.581] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%)
+  paired clusters below five: 0
+  P-B0-S: n = 100 usable pairs of 100 attempted, median 2.9; range between blocks [-11.9, 19.1] (ranks 2 and 9 of 10 blocks, nominal exact coverage under independent exchangeable block medians 97.9%)
+  paired clusters below five: 0
+All datasets are shown side by side. Containment is descriptive, not equivalence or evidence of robustness; an absent or degenerate range is indeterminate.
+P differences: S1 - primary: 0.0 ms (0.0%) | S2 - primary: 0.0 ms (0.0%) | S3 - primary: 0.0 ms (0.0%)
+S differences: S1 - primary: 0.0 ms (0.0%) | S2 - primary: 0.0 ms (0.0%) | S3 - primary: 0.0 ms (0.0%)
+C differences: S1 - primary: 0.0 ms (0.0%) | S2 - primary: 0.0 ms (0.0%) | S3 - primary: 0.0 ms (0.0%)
+Bt differences: S1 - primary: 0.0 ms (0.0%) | S2 - primary: 0.0 ms (0.0%) | S3 - primary: 0.0 ms (0.0%)
+S/C differences: S1 - primary: 0.000 ratio units (0.0%) | S2 - primary: 0.000 ratio units (0.0%) | S3 - primary: 0.000 ratio units (0.0%)
+S/Bt differences: S1 - primary: 0.000 ratio units (0.0%) | S2 - primary: 0.000 ratio units (0.0%) | S3 - primary: 0.000 ratio units (0.0%)
+P-B0-S differences: S1 - primary: 0.0 ms (0.0%) | S2 - primary: 0.0 ms (0.0%) | S3 - primary: 0.0 ms (0.0%)

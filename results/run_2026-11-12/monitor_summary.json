@@ -1,0 +1,318 @@
+{
+  "description": "Sanitised summary of the network monitor of the Sepolia run of 12 November 2026 (counts and times only).",
+  "script": "results/run_2026-11-12/make_monitor_summary.py",
+  "monitor_file": {
+    "name": "run_monitor.jsonl",
+    "sha256": "ad1db559e6dac33d3a088d23432094327c82375c7a391c66f991dd3867d9ff24",
+    "published": false
+  },
+  "log_file": {
+    "name": "sepolia_2026-11-12_n100.jsonl",
+    "sha256": "f55e20ceb868b0d20a4739043d4c43edb476b9e2acab7f210ff16cb737d543be"
+  },
+  "rules": {
+    "gap_s": 90,
+    "window_before_start_s": 90,
+    "window_after_start_s": 120,
+    "note_cpu_pct": 25,
+    "note_received_bytes_per_minute": 1000000
+  },
+  "withheld_fields": [
+    "gw",
+    "net",
+    "saltId",
+    "w",
+    "wid",
+    "ifaces",
+    "batteryPct",
+    "txBytes",
+    "node.cpuSec",
+    "node.wsMB"
+  ],
+  "overall": {
+    "ticks": 742,
+    "unreadable_lines": 0,
+    "wrappers": 1,
+    "first_tick_utc": "2026-11-12T02:10:31.703Z",
+    "last_tick_utc": "2026-11-12T14:30:23.436Z",
+    "first_tick_ist": "07:40:31",
+    "last_tick_ist": "20:00:23",
+    "largest_gap_s": 60,
+    "ticks_with_gap_over_90_s": 0,
+    "ticks_not_on_mains": 0,
+    "ticks_wifi_down": 0,
+    "ticks_vpn_up": 0,
+    "ticks_restart_pending": 0,
+    "ticks_measurement_process_alive": 741,
+    "default_gateway_changes_between_ticks": 0,
+    "interface_changes_between_ticks": 0,
+    "network_identity": {
+      "baseline_present": true,
+      "ticks_compared": 742,
+      "ticks_same": 742,
+      "ticks_different": 0,
+      "ticks_not_comparable": 0
+    },
+    "cpu_pct": {
+      "ticks_with_value": 741,
+      "median": 1.4,
+      "max": 28.1,
+      "ticks_over_25_pct": 1
+    },
+    "received_kb_per_minute": {
+      "intervals": 741,
+      "median": 23,
+      "max": 13787,
+      "intervals_over_1_mb": 14
+    }
+  },
+  "block_windows_by_network_state": {
+    "SAME": 10,
+    "DIFFERENT": 0,
+    "UNKNOWN": 0
+  },
+  "block_windows": [
+    {
+      "run": "2026-11-12T02:10:41.036Z",
+      "block": 1,
+      "slot": "08:00",
+      "started_at_utc": "2026-11-12T02:30:00.003Z",
+      "ticks_in_window": 4,
+      "ticks_with_gap_over_90_s": 0,
+      "wifi_down": 0,
+      "vpn_up": 0,
+      "default_gateway_changed": 0,
+      "interfaces_changed": 0,
+      "network_state": "SAME",
+      "identity_ticks": {
+        "same": 4,
+        "different": 0,
+        "not_comparable": 0
+      },
+      "notes": {
+        "not_on_mains": 0,
+        "restart_pending": 0,
+        "cpu_over_25_pct": 0,
+        "received_over_1_mb_kb": [
+          6423
+        ]
+      }
+    },
+    {
+      "run": "2026-11-12T02:10:41.036Z",
+      "block": 2,
+      "slot": "09:20",
+      "started_at_utc": "2026-11-12T03:50:00.008Z",
+      "ticks_in_window": 4,
+      "ticks_with_gap_over_90_s": 0,
+      "wifi_down": 0,
+      "vpn_up": 0,
+      "default_gateway_changed": 0,
+      "interfaces_changed": 0,
+      "network_state": "SAME",
+      "identity_ticks": {
+        "same": 4,
+        "different": 0,
+        "not_comparable": 0
+      },
+      "notes": {
+        "not_on_mains": 0,
+        "restart_pending": 0,
+        "cpu_over_25_pct": 0,
+        "received_over_1_mb_kb": []
+      }
+    },
+    {
+      "run": "2026-11-12T02:10:41.036Z",
+      "block": 3,
+      "slot": "10:40",
+      "started_at_utc": "2026-11-12T05:10:00.011Z",
+      "ticks_in_window": 4,
+      "ticks_with_gap_over_90_s": 0,
+      "wifi_down": 0,
+      "vpn_up": 0,
+      "default_gateway_changed": 0,
+      "interfaces_changed": 0,
+      "network_state": "SAME",
+      "identity_ticks": {
+        "same": 4,
+        "different": 0,
+        "not_comparable": 0
+      },
+      "notes": {
+        "not_on_mains": 0,
+        "restart_pending": 0,
+        "cpu_over_25_pct": 0,
+        "received_over_1_mb_kb": []
+      }
+    },
+    {
+      "run": "2026-11-12T02:10:41.036Z",
+      "block": 4,
+      "slot": "12:00",
+      "started_at_utc": "2026-11-12T06:30:00.011Z",
+      "ticks_in_window": 4,
+      "ticks_with_gap_over_90_s": 0,
+      "wifi_down": 0,
+      "vpn_up": 0,
+      "default_gateway_changed": 0,
+      "interfaces_changed": 0,
+      "network_state": "SAME",
+      "identity_ticks": {
+        "same": 4,
+        "different": 0,
+        "not_comparable": 0
+      },
+      "notes": {
+        "not_on_mains": 0,
+        "restart_pending": 0,
+        "cpu_over_25_pct": 0,
+        "received_over_1_mb_kb": []
+      }
+    },
+    {
+      "run": "2026-11-12T02:10:41.036Z",
+      "block": 5,
+      "slot": "13:20",
+      "started_at_utc": "2026-11-12T07:50:00.012Z",
+      "ticks_in_window": 4,
+      "ticks_with_gap_over_90_s": 0,
+      "wifi_down": 0,
+      "vpn_up": 0,
+      "default_gateway_changed": 0,
+      "interfaces_changed": 0,
+      "network_state": "SAME",
+      "identity_ticks": {
+        "same": 4,
+        "different": 0,
+        "not_comparable": 0
+      },
+      "notes": {
+        "not_on_mains": 0,
+        "restart_pending": 0,
+        "cpu_over_25_pct": 0,
+        "received_over_1_mb_kb": []
+      }
+    },
+    {
+      "run": "2026-11-12T02:10:41.036Z",
+      "block": 6,
+      "slot": "14:40",
+      "started_at_utc": "2026-11-12T09:10:00.015Z",
+      "ticks_in_window": 4,
+      "ticks_with_gap_over_90_s": 0,
+      "wifi_down": 0,
+      "vpn_up": 0,
+      "default_gateway_changed": 0,
+      "interfaces_changed": 0,
+      "network_state": "SAME",
+      "identity_ticks": {
+        "same": 4,
+        "different": 0,
+        "not_comparable": 0
+      },
+      "notes": {
+        "not_on_mains": 0,
+        "restart_pending": 0,
+        "cpu_over_25_pct": 0,
+        "received_over_1_mb_kb": []
+      }
+    },
+    {
+      "run": "2026-11-12T02:10:41.036Z",
+      "block": 7,
+      "slot": "16:00",
+      "started_at_utc": "2026-11-12T10:30:00.015Z",
+      "ticks_in_window": 4,
+      "ticks_with_gap_over_90_s": 0,
+      "wifi_down": 0,
+      "vpn_up": 0,
+      "default_gateway_changed": 0,
+      "interfaces_changed": 0,
+      "network_state": "SAME",
+      "identity_ticks": {
+        "same": 4,
+        "different": 0,
+        "not_comparable": 0
+      },
+      "notes": {
+        "not_on_mains": 0,
+        "restart_pending": 0,
+        "cpu_over_25_pct": 0,
+        "received_over_1_mb_kb": []
+      }
+    },
+    {
+      "run": "2026-11-12T02:10:41.036Z",
+      "block": 8,
+      "slot": "17:20",
+      "started_at_utc": "2026-11-12T11:50:00.002Z",
+      "ticks_in_window": 4,
+      "ticks_with_gap_over_90_s": 0,
+      "wifi_down": 0,
+      "vpn_up": 0,
+      "default_gateway_changed": 0,
+      "interfaces_changed": 0,
+      "network_state": "SAME",
+      "identity_ticks": {
+        "same": 4,
+        "different": 0,
+        "not_comparable": 0
+      },
+      "notes": {
+        "not_on_mains": 0,
+        "restart_pending": 0,
+        "cpu_over_25_pct": 0,
+        "received_over_1_mb_kb": []
+      }
+    },
+    {
+      "run": "2026-11-12T02:10:41.036Z",
+      "block": 9,
+      "slot": "18:40",
+      "started_at_utc": "2026-11-12T13:10:00.017Z",
+      "ticks_in_window": 4,
+      "ticks_with_gap_over_90_s": 0,
+      "wifi_down": 0,
+      "vpn_up": 0,
+      "default_gateway_changed": 0,
+      "interfaces_changed": 0,
+      "network_state": "SAME",
+      "identity_ticks": {
+        "same": 4,
+        "different": 0,
+        "not_comparable": 0
+      },
+      "notes": {
+        "not_on_mains": 0,
+        "restart_pending": 0,
+        "cpu_over_25_pct": 0,
+        "received_over_1_mb_kb": []
+      }
+    },
+    {
+      "run": "2026-11-12T02:10:41.036Z",
+      "block": 10,
+      "slot": "20:00",
+      "started_at_utc": "2026-11-12T14:30:00.003Z",
+      "ticks_in_window": 3,
+      "ticks_with_gap_over_90_s": 0,
+      "wifi_down": 0,
+      "vpn_up": 0,
+      "default_gateway_changed": 0,
+      "interfaces_changed": 0,
+      "network_state": "SAME",
+      "identity_ticks": {
+        "same": 3,
+        "different": 0,
+        "not_comparable": 0
+      },
+      "notes": {
+        "not_on_mains": 0,
+        "restart_pending": 0,
+        "cpu_over_25_pct": 0,
+        "received_over_1_mb_kb": []
+      }
+    }
+  ]
+}

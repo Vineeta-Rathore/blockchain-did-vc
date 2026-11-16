@@ -1,2 +1,15 @@
 # The W3C test-vector fixture must stay byte-identical (its SHA-256 identifies the one allowed key in the secret scans).
 test/fixtures/eddsa-jcs-2022-B3.json -text
+
+# Published byte for byte: their SHA-256 values are in the paper, in run_day/MANIFEST_SUBSET.sha256 or in the README.
+# No line-ending conversion, so a checkout or the release zip holds the same bytes on every system.
+results/local_2026-11-09_n100.jsonl -text
+results/sepolia_2026-11-12_n100.jsonl -text
+results/sepolia_v1.1_deployment.json -text
+results/run_2026-11-12/** -text
+results/r2.1_local_comparison/** -text
+run_day/** -text
+test-transcripts/** -text
+
+# Shell scripts keep LF line endings, so bash runs them also on a Windows checkout.
+*.sh text eol=lf

@@ -1,0 +1,46 @@
+# Run-day manifest: the lines of the published files
+#
+# The rules and tools of the 12 November 2026 Sepolia run were fixed before the run and listed, with their SHA-256 and
+# size in bytes, in one manifest file (RUN_DAY_MANIFEST.sha256, 23 lines). The SHA-256 of that manifest,
+# 8a2ff62b04a01042e8a523a240eda58d3eb183841b46d8eb1c40803a9d22e04f, was e-mailed to the corresponding author's own
+# mailbox before the run (received 07:18:25 IST, 12 November 2026; see the Data Availability Statement of the paper).
+#
+# The manifest also lists two internal planning files (R2_REVISION_PLAN.md and R2_SOP.md) that are not published.
+# So a reader can check each published file against its manifest line below, but cannot recompute the manifest hash
+# from this repository.
+#
+# Each entry is the manifest line unchanged (SHA-256, size, path in the authors' folder), then "=>" and the path of the
+# same file in this repository. Every published file was copied byte for byte and its SHA-256 checked after copying.
+# Check one file: sha256sum <path in this repository>, and compare with the first field.
+#
+# Line endings. The files under run_day/ and results/sepolia_v1.1_deployment.json are stored without line-ending
+# conversion (see .gitattributes), so their bytes are the same on every system. contracts/DIDRegistry.sol and the
+# scripts were committed at 73b4cca with LF line endings. The manifest hashed the authors' Windows checkout, in which
+# git wrote contracts/DIDRegistry.sol with CRLF line endings: its line matches after converting LF to CRLF. The five
+# scripts have LF endings in that checkout too, so their lines match as committed.
+#
+2a4e07578c99c015bf6618a5c76b8149aadeebd8835b0fc632d9d6aef35060a3     24883  artifact_v1.1/contracts/DIDRegistry.sol  =>  contracts/DIDRegistry.sol
+50bbf111484522a0adfee4d928dc51545acc8b8054989b3274e44128483c31d1      6498  artifact_v1.1/results/sepolia_v1.1_deployment.json  =>  results/sepolia_v1.1_deployment.json
+b0bc2f4e22d316f8864470bb9205f327936f66abd593db824c65825b390bb6d5     17094  artifact_v1.1/scripts/analyze-latency.js  =>  scripts/analyze-latency.js
+505d821d073c6e08013c47f3301fb3d9b38a7b547dc1cbe8e909f6faeb445d4e      8728  artifact_v1.1/scripts/lib/rpc.js  =>  scripts/lib/rpc.js
+2d734579505b8cd310d7ca1e6188c35791c0ad375bf25fb2aed7ef20a319997d      7838  artifact_v1.1/scripts/lib/sepolia-modes.js  =>  scripts/lib/sepolia-modes.js
+bc2bfc5b7e5df66ff93c23eae7cbf658c2b95d7b7c68706737b399980ffc027d      6129  artifact_v1.1/scripts/lib/stats.js  =>  scripts/lib/stats.js
+2b969901239d7812a3aade2b71082cb97888c0ef9ba8985cf678453be5a713b6      9011  artifact_v1.1/scripts/measure-sepolia.js  =>  scripts/measure-sepolia.js
+622d8a127da72d8f925d61452878d4c7db00d69ef792bf1b1b66a307795c1bf2     23568  run_day/analysis_primary.js  =>  run_day/analysis_primary.js
+a067de485a4f6e77c79f4b247371e1612d47f610efd5da43b4a492f18f542eec     44163  run_day/check_sepolia_run.js  =>  run_day/check_sepolia_run.js
+a259d03a6c2e0ea83965f8242a17cff7730fb5233bbe251693e67b3ad6637cd6     19291  run_day/preflight.ps1  =>  run_day/preflight.ps1
+7435408fc1b3fda9551cbd426a4ecb64f8a11025bf2bd171d751ceebdf60ca9a      8707  run_day/preflight_chain.js  =>  run_day/preflight_chain.js
+d4828507feddba797e2615aea73732d214528a6d4c8aa0ab824cecccc0a47059     20118  run_day/RUN_DAY.md  =>  run_day/RUN_DAY.md
+a70b058619aaf95145f017a91db263d7a90351aaf136fbbe7c2a436c8d99450d     27171  run_day/start_sepolia_run.ps1  =>  run_day/start_sepolia_run.ps1
+14817c2ef531633eee0cfc5f1fb557eda6444fc88c7ea883b3d6959ae8590499      5666  run_day/status.ps1  =>  run_day/status.ps1
+bc958cabd746c074efcfc8f48b8fa1ee66b3a530b512862d017397f6c1a82412      3171  run_day/tests/make_synth_log.js  =>  run_day/tests/make_synth_log.js
+be82dbea45ce37db56b4ad789e6226095685d4a9b06395436d936d331184e961     34026  run_day/tests/mutation.js  =>  run_day/tests/mutation.js
+8103780e86b3925ca8d579883d92143e4968f70f357a042481176293918f2bb4     18671  run_day/tests/template_clean_block.jsonl  =>  run_day/tests/template_clean_block.jsonl
+02ce8efd56cd8d4d8d75a6202f5e974123afa9abdf138f0f47e1a5a950cff2a4    101452  run_day/tests/test_check_sepolia_run.js  =>  run_day/tests/test_check_sepolia_run.js
+47081e311d5257b746aef59b19986cc280ff6c871b5c9524e442291bd7ec2367     12301  run_day/tests/test_consistency.js  =>  run_day/tests/test_consistency.js
+feebb93cec1ff7dbf19ea9637801e2e7255518d55f1f7a7a21907c724104a2ee     13846  run_day/tests/test_wrapper.ps1  =>  run_day/tests/test_wrapper.ps1
+7e4cbb743890acc0c2f4b8c9f4caf41f3edd1ffc4568ed17550ce0d2bda1e244     22040  RUN_DAY_ADDENDUM_DRAFT.md  =>  run_day/RUN_DAY_ADDENDUM_DRAFT.md
+#
+# Not published (internal planning files; their lines are in the manifest):
+#   R2_REVISION_PLAN.md
+#   R2_SOP.md

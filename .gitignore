@@ -20,3 +20,6 @@ coverage.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Figure build output (bash figures/build_all.sh)
+figures/out/

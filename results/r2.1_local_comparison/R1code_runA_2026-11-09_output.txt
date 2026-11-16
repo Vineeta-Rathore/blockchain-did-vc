@@ -1,0 +1,69 @@
+﻿
+
+  DIDRegistry
+    Deployment
+      √ Should set the deployer as admin
+      √ Should have correct initial state
+      √ Should set deployer as owner
+    DID Creation
+      √ Should create a new DID successfully (71ms)
+      √ Should prevent duplicate DID creation (43ms)
+      √ Should handle multiple DIDs from same user (100ms)
+    DID Updates
+      √ Should allow controller to update DID (70ms)
+      √ Should prevent unauthorized updates
+      √ Should prevent non-controller from deactivating DID
+    DID Verification
+      √ Should return false for non-existent DID
+      √ Should return true for active DID (52ms)
+      √ Should return false for deactivated DID (69ms)
+    Controller Management
+      √ Should transfer DID control (69ms)
+      √ Should get DIDs by controller (89ms)
+      √ Should prevent non-controller from transferring DID control (39ms)
+    Key Rotation
+      √ Should rotate verification key (76ms)
+      √ Should prevent non-controller from rotating verification key (56ms)
+    Revocation Registry
+      √ Should revoke a credential (101ms)
+      √ Should not revoke same credential twice (86ms)
+      √ Should allow credential revocation after issuer DID is deactivated (127ms)
+      √ Should revert when revoking credential on non-existent DID
+    Admin Functions
+      √ Should allow admin to add new admin
+      √ Should prevent non-admin from adding admin
+      √ Should allow admin to pause contract (52ms)
+      √ Should prevent non-admin from pausing contract
+      √ Should revert DID creation when contract is paused
+    Gas Optimization
+Gas used for DID creation: 346878
+      √ Should use reasonable gas for DID creation (53ms)
+    Edge Cases
+      √ Should handle empty verification methods (51ms)
+      √ Should handle long DID strings
+      √ Should reactivate deactivated DID (117ms)
+
+  Journal 2 DID + VC credential flow
+    √ verifies a valid Ed25519-signed VC successfully (51ms)
+    √ uses a W3C Ed25519 multikey value with 0xed01 prefix and 32-byte raw key
+    √ uses a W3C Ed25519 secret multikey value with 0x8026 prefix and 32-byte raw key
+    √ fails when the credential subject is tampered (53ms)
+    √ fails when the issuer DID is tampered
+    √ fails when the credential is signed with the wrong issuer key (54ms)
+    √ fails when the credential has expired
+Gas used for credential revocation: 171188
+    √ fails when the credential is revoked on-chain (102ms)
+    √ fails when the issuer DID is inactive (52ms)
+    √ fails when the subject DID is inactive (49ms)
+    √ documents duplicate credential ID behavior through the revocation registry (168ms)
+    √ rejects duplicate revocation attempts
+    √ prevents non-controller credential revocation
+    √ fails on a malformed credential missing required fields
+    √ fails when the issuer verification method has been rotated off the DID document (88ms)
+    √ fails when the proof configuration is tampered after signing (57ms)
+VC verification latency over 100 runs: mean=56.353ms p50=51.590ms p95=68.438ms
+    √ measures end-to-end credential verification latency for evaluation reporting (5650ms)
+
+
+  47 passing (12s)
+

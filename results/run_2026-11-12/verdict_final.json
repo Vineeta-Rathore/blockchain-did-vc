@@ -1,0 +1,543 @@
+{
+  "checker_sha256": "a067de485a4f6e77c79f4b247371e1612d47f610efd5da43b4a492f18f542eec",
+  "date": "2026-11-12",
+  "evaluated_at": "2026-11-12T15:07:54.045Z",
+  "clock_override": false,
+  "expect_overrides": [],
+  "closed_slots": [],
+  "log": "sepolia_2026-11-12_n100.jsonl",
+  "log_sha256": "f55e20ceb868b0d20a4739043d4c43edb476b9e2acab7f210ff16cb737d543be",
+  "monitor_files": [
+    {
+      "name": "run_monitor.jsonl",
+      "sha256": "ad1db559e6dac33d3a088d23432094327c82375c7a391c66f991dd3867d9ff24"
+    }
+  ],
+  "no_monitor": false,
+  "rehearsal": false,
+  "gate_failures": 0,
+  "fatal_gate_failures": 0,
+  "gates": [
+    {
+      "id": "NETWORK_BASELINE",
+      "fatal": false,
+      "ok": true
+    },
+    {
+      "id": "JSON_FORMAT",
+      "fatal": false,
+      "ok": true
+    },
+    {
+      "id": "ORPHAN_ROWS",
+      "fatal": false,
+      "ok": true
+    },
+    {
+      "id": "INVOCATIONS_PRESENT",
+      "fatal": false,
+      "ok": true
+    },
+    {
+      "id": "PILOT_ROWS",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_SCRIPT_LABEL",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_CHAIN",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_COMMIT",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_BLOCK_LAG",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_ITERATIONS",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_CONTRACT",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_CREDENTIAL",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_DEPLOYER_START",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_PROVIDER",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_NODE",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_ETHERS",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_TIMEZONE",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_AGENTS",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_TIMEOUT",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_SLOTS",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "FOOTER_PRESENT",
+      "fatal": false,
+      "ok": true
+    },
+    {
+      "id": "CONFIG_DEPLOYER_END",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "FOREIGN_RUN_IDS",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "MONITOR_FILE",
+      "fatal": false,
+      "ok": true
+    },
+    {
+      "id": "MAIN_COUNT",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "RESERVE_COUNT",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "RESERVE_SLOT_UNIQUE",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "RESERVE_BLOCK_UNIQUE",
+      "fatal": true,
+      "ok": true
+    },
+    {
+      "id": "LOG_SELF_SCAN",
+      "fatal": false,
+      "ok": true
+    }
+  ],
+  "failed_main_blocks": [],
+  "unfit_main_blocks": [],
+  "day_rule": {
+    "final": true,
+    "pending": [],
+    "closed_slots": [],
+    "reserve_states": [],
+    "stands": true,
+    "data_sufficient": true,
+    "fatal_gate_failures": 0,
+    "covered_slots": 10,
+    "primary_usable_rows": {
+      "P": 100,
+      "S": 100,
+      "C": 100,
+      "Bt": 100
+    },
+    "slot_clusters": [
+      {
+        "block": 1,
+        "used": "main",
+        "run": "2026-11-12T02:10:41.036Z",
+        "excluded": false,
+        "covered": true,
+        "usable": {
+          "P": 10,
+          "S": 10,
+          "C": 10,
+          "Bt": 10
+        }
+      },
+      {
+        "block": 2,
+        "used": "main",
+        "run": "2026-11-12T02:10:41.036Z",
+        "excluded": false,
+        "covered": true,
+        "usable": {
+          "P": 10,
+          "S": 10,
+          "C": 10,
+          "Bt": 10
+        }
+      },
+      {
+        "block": 3,
+        "used": "main",
+        "run": "2026-11-12T02:10:41.036Z",
+        "excluded": false,
+        "covered": true,
+        "usable": {
+          "P": 10,
+          "S": 10,
+          "C": 10,
+          "Bt": 10
+        }
+      },
+      {
+        "block": 4,
+        "used": "main",
+        "run": "2026-11-12T02:10:41.036Z",
+        "excluded": false,
+        "covered": true,
+        "usable": {
+          "P": 10,
+          "S": 10,
+          "C": 10,
+          "Bt": 10
+        }
+      },
+      {
+        "block": 5,
+        "used": "main",
+        "run": "2026-11-12T02:10:41.036Z",
+        "excluded": false,
+        "covered": true,
+        "usable": {
+          "P": 10,
+          "S": 10,
+          "C": 10,
+          "Bt": 10
+        }
+      },
+      {
+        "block": 6,
+        "used": "main",
+        "run": "2026-11-12T02:10:41.036Z",
+        "excluded": false,
+        "covered": true,
+        "usable": {
+          "P": 10,
+          "S": 10,
+          "C": 10,
+          "Bt": 10
+        }
+      },
+      {
+        "block": 7,
+        "used": "main",
+        "run": "2026-11-12T02:10:41.036Z",
+        "excluded": false,
+        "covered": true,
+        "usable": {
+          "P": 10,
+          "S": 10,
+          "C": 10,
+          "Bt": 10
+        }
+      },
+      {
+        "block": 8,
+        "used": "main",
+        "run": "2026-11-12T02:10:41.036Z",
+        "excluded": false,
+        "covered": true,
+        "usable": {
+          "P": 10,
+          "S": 10,
+          "C": 10,
+          "Bt": 10
+        }
+      },
+      {
+        "block": 9,
+        "used": "main",
+        "run": "2026-11-12T02:10:41.036Z",
+        "excluded": false,
+        "covered": true,
+        "usable": {
+          "P": 10,
+          "S": 10,
+          "C": 10,
+          "Bt": 10
+        }
+      },
+      {
+        "block": 10,
+        "used": "main",
+        "run": "2026-11-12T02:10:41.036Z",
+        "excluded": false,
+        "covered": true,
+        "usable": {
+          "P": 10,
+          "S": 10,
+          "C": 10,
+          "Bt": 10
+        }
+      }
+    ]
+  },
+  "network_identity": {
+    "compared": 742,
+    "differing": 0,
+    "no_profile": 0,
+    "first_at": null,
+    "last_at": null
+  },
+  "plan": {
+    "20:40": null,
+    "21:20": null
+  },
+  "invocations": [
+    {
+      "index": 1,
+      "kind": "main",
+      "run": "2026-11-12T02:10:41.036Z",
+      "only_block": null,
+      "matches_plan": true,
+      "reserve_slot": null,
+      "footer": true,
+      "blocks": [
+        {
+          "block": 1,
+          "slot": "08:00",
+          "status": "clean",
+          "reasons": [],
+          "structure": [],
+          "notes": [
+            "6423 KB received in the minute of a tick (note only)"
+          ],
+          "rows": 50,
+          "usable": {
+            "P": 10,
+            "S": 10,
+            "C": 10,
+            "Bt": 10
+          },
+          "short": false,
+          "off_network": false,
+          "network_state": "SAME",
+          "unfit": false,
+          "started_at": "2026-11-12T02:30:00.003Z"
+        },
+        {
+          "block": 2,
+          "slot": "09:20",
+          "status": "clean",
+          "reasons": [],
+          "structure": [],
+          "notes": [],
+          "rows": 50,
+          "usable": {
+            "P": 10,
+            "S": 10,
+            "C": 10,
+            "Bt": 10
+          },
+          "short": false,
+          "off_network": false,
+          "network_state": "SAME",
+          "unfit": false,
+          "started_at": "2026-11-12T03:50:00.008Z"
+        },
+        {
+          "block": 3,
+          "slot": "10:40",
+          "status": "clean",
+          "reasons": [],
+          "structure": [],
+          "notes": [],
+          "rows": 50,
+          "usable": {
+            "P": 10,
+            "S": 10,
+            "C": 10,
+            "Bt": 10
+          },
+          "short": false,
+          "off_network": false,
+          "network_state": "SAME",
+          "unfit": false,
+          "started_at": "2026-11-12T05:10:00.011Z"
+        },
+        {
+          "block": 4,
+          "slot": "12:00",
+          "status": "clean",
+          "reasons": [],
+          "structure": [],
+          "notes": [],
+          "rows": 50,
+          "usable": {
+            "P": 10,
+            "S": 10,
+            "C": 10,
+            "Bt": 10
+          },
+          "short": false,
+          "off_network": false,
+          "network_state": "SAME",
+          "unfit": false,
+          "started_at": "2026-11-12T06:30:00.011Z"
+        },
+        {
+          "block": 5,
+          "slot": "13:20",
+          "status": "clean",
+          "reasons": [],
+          "structure": [],
+          "notes": [],
+          "rows": 50,
+          "usable": {
+            "P": 10,
+            "S": 10,
+            "C": 10,
+            "Bt": 10
+          },
+          "short": false,
+          "off_network": false,
+          "network_state": "SAME",
+          "unfit": false,
+          "started_at": "2026-11-12T07:50:00.012Z"
+        },
+        {
+          "block": 6,
+          "slot": "14:40",
+          "status": "clean",
+          "reasons": [],
+          "structure": [],
+          "notes": [],
+          "rows": 50,
+          "usable": {
+            "P": 10,
+            "S": 10,
+            "C": 10,
+            "Bt": 10
+          },
+          "short": false,
+          "off_network": false,
+          "network_state": "SAME",
+          "unfit": false,
+          "started_at": "2026-11-12T09:10:00.015Z"
+        },
+        {
+          "block": 7,
+          "slot": "16:00",
+          "status": "clean",
+          "reasons": [],
+          "structure": [],
+          "notes": [],
+          "rows": 50,
+          "usable": {
+            "P": 10,
+            "S": 10,
+            "C": 10,
+            "Bt": 10
+          },
+          "short": false,
+          "off_network": false,
+          "network_state": "SAME",
+          "unfit": false,
+          "started_at": "2026-11-12T10:30:00.015Z"
+        },
+        {
+          "block": 8,
+          "slot": "17:20",
+          "status": "clean",
+          "reasons": [],
+          "structure": [],
+          "notes": [],
+          "rows": 50,
+          "usable": {
+            "P": 10,
+            "S": 10,
+            "C": 10,
+            "Bt": 10
+          },
+          "short": false,
+          "off_network": false,
+          "network_state": "SAME",
+          "unfit": false,
+          "started_at": "2026-11-12T11:50:00.002Z"
+        },
+        {
+          "block": 9,
+          "slot": "18:40",
+          "status": "clean",
+          "reasons": [],
+          "structure": [],
+          "notes": [],
+          "rows": 50,
+          "usable": {
+            "P": 10,
+            "S": 10,
+            "C": 10,
+            "Bt": 10
+          },
+          "short": false,
+          "off_network": false,
+          "network_state": "SAME",
+          "unfit": false,
+          "started_at": "2026-11-12T13:10:00.017Z"
+        },
+        {
+          "block": 10,
+          "slot": "20:00",
+          "status": "clean",
+          "reasons": [],
+          "structure": [],
+          "notes": [],
+          "rows": 50,
+          "usable": {
+            "P": 10,
+            "S": 10,
+            "C": 10,
+            "Bt": 10
+          },
+          "short": false,
+          "off_network": false,
+          "network_state": "SAME",
+          "unfit": false,
+          "started_at": "2026-11-12T14:30:00.003Z"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,171 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "deployer": "0x1Af22bC52FB82C57Fb210536462D6b857A3C073f",
+  "txs": {
+    "deploy": {
+      "hash": "0xd45d5ea44c3291ac3686306188fa67c526b2c047c24f60fdf99441cbacecfb2a",
+      "nonce": 0,
+      "block": 12099140,
+      "gasUsed": 21692728,
+      "effectiveGasPrice": "10000019",
+      "status": 1,
+      "fees": {
+        "maxPriorityFeePerGas": "10000000",
+        "maxFeePerGas": "10000038",
+        "gasLimit": "21866060"
+      }
+    },
+    "createIssuerDID": {
+      "hash": "0xb921e80250122c55d258f431d19f38bee34c52796af9267c288535d7b2de2ac3",
+      "nonce": 1,
+      "block": 12099141,
+      "gasUsed": 3009361,
+      "effectiveGasPrice": "10000020",
+      "status": 1,
+      "fees": {
+        "maxPriorityFeePerGas": "10000000",
+        "maxFeePerGas": "10000038",
+        "gasLimit": "3034412"
+      }
+    },
+    "createSubjectDID": {
+      "hash": "0x05218704c7cb7db55df82feabfb2506c13e753c342e9900b388ceecc92429242",
+      "nonce": 2,
+      "block": 12099142,
+      "gasUsed": 2139071,
+      "effectiveGasPrice": "10000020",
+      "status": 1,
+      "fees": {
+        "maxPriorityFeePerGas": "10000000",
+        "maxFeePerGas": "10000040",
+        "gasLimit": "2157215"
+      }
+    },
+    "revokeCredentialA": {
+      "hash": "0xddeee18763c86bfe7334483a9c74190d96033faa6697a8e61c1cd8ddc2a43c2c",
+      "nonce": 3,
+      "block": 12099143,
+      "gasUsed": 138811,
+      "effectiveGasPrice": "10000020",
+      "status": 1,
+      "fees": {
+        "maxPriorityFeePerGas": "10000000",
+        "maxFeePerGas": "10000040",
+        "gasLimit": "139945"
+      }
+    }
+  },
+  "pending": {},
+  "feePolicy": {
+    "tipGwei": "0.01",
+    "maxBaseFeeGwei": "0.5",
+    "maxFeePerGas": "2 x latest base fee + tip"
+  },
+  "address": "0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2",
+  "bytecode": {
+    "runtimeKeccak": "0x355a986a5dcdb4a27681df3ca000a60bd2d3a526904c483d32c2870867710679",
+    "artifactDeployedKeccak": "0x355a986a5dcdb4a27681df3ca000a60bd2d3a526904c483d32c2870867710679",
+    "equal": true
+  },
+  "inputs": {
+    "issuer": {
+      "didId": "did:smid:86671ea742104ba6ec59708fcca6cec0",
+      "verificationMethods": [
+        "{\"id\":\"did:smid:86671ea742104ba6ec59708fcca6cec0#key-1\",\"type\":\"Multikey\",\"controller\":\"did:smid:86671ea742104ba6ec59708fcca6cec0\",\"publicKeyMultibase\":\"z6MkmPDjhNu6kvSo43JMBDbumX8P5yoEapvjYkf11fYg79Ma\"}"
+      ],
+      "services": [
+        "{\"id\":\"did:smid:86671ea742104ba6ec59708fcca6cec0#credentials\",\"type\":\"CredentialIssuerService\",\"serviceEndpoint\":\"https://issuer.example/credentials\"}"
+      ],
+      "dataHash": "0xc08e8f6121a02804cdcabc750f44e11eb1b3c1f4f77fc07b750576837a9443b2"
+    },
+    "subject": {
+      "didId": "did:smid:f7f8cf59f2f42b205d00960f3a30a531",
+      "verificationMethods": [
+        "{\"id\":\"did:smid:f7f8cf59f2f42b205d00960f3a30a531#key-1\",\"type\":\"Multikey\",\"controller\":\"did:smid:f7f8cf59f2f42b205d00960f3a30a531\",\"publicKeyMultibase\":\"z6Mkoxf7YYE27XTUNUthUhtpMh1dQUrmqYA8F5cYBkHyL6ww\"}"
+      ],
+      "services": [],
+      "dataHash": "0x53045e1e8c906a506a7cf35c3ee7ab50e48fba270a8eb0fa66aa34085c5ea9d3"
+    },
+    "credentialId": "urn:uuid:d8129b1a-b466-494d-89de-5bb6a28de99b",
+    "reasonCode": 9
+  },
+  "credentials": {
+    "A": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://w3id.org/security/data-integrity/v2"
+      ],
+      "id": "urn:uuid:d8129b1a-b466-494d-89de-5bb6a28de99b",
+      "type": [
+        "VerifiableCredential",
+        "IdentityCredential"
+      ],
+      "issuer": "did:smid:86671ea742104ba6ec59708fcca6cec0",
+      "validFrom": "2026-11-09T17:56:25.439Z",
+      "validUntil": "2027-11-09T17:56:25.439Z",
+      "credentialSubject": {
+        "id": "did:smid:f7f8cf59f2f42b205d00960f3a30a531",
+        "name": "Verified Identity",
+        "role": "verified-account"
+      },
+      "credentialStatus": {
+        "id": "ethereum:0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2/revocation/did%3Asmid%3A86671ea742104ba6ec59708fcca6cec0/urn%3Auuid%3Ad8129b1a-b466-494d-89de-5bb6a28de99b",
+        "type": "EthereumRevocationRegistry2026",
+        "revocationRegistry": "0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2",
+        "revocationMethod": "DIDRegistry.isCredentialRevoked(string,string)"
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "created": "2026-11-09T17:56:25.439Z",
+        "verificationMethod": "did:smid:86671ea742104ba6ec59708fcca6cec0#key-1",
+        "proofPurpose": "assertionMethod",
+        "@context": [
+          "https://www.w3.org/ns/credentials/v2",
+          "https://w3id.org/security/data-integrity/v2"
+        ],
+        "proofValue": "z2Trkj43xFQuFKmVx2BhV3DP7XxkmBgQ6xTh1Rma1bYZXYWhAiqaUHHLpFi7wDqCd7VAHGGSNgwarB6SgZwPdh58e"
+      }
+    },
+    "B": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://w3id.org/security/data-integrity/v2"
+      ],
+      "id": "urn:uuid:1256918c-573a-412b-943f-9ec389c0b9de",
+      "type": [
+        "VerifiableCredential",
+        "IdentityCredential"
+      ],
+      "issuer": "did:smid:86671ea742104ba6ec59708fcca6cec0",
+      "validFrom": "2026-11-09T17:56:25.442Z",
+      "validUntil": "2027-11-09T17:56:25.442Z",
+      "credentialSubject": {
+        "id": "did:smid:f7f8cf59f2f42b205d00960f3a30a531",
+        "name": "Verified Identity",
+        "role": "verified-account"
+      },
+      "credentialStatus": {
+        "id": "ethereum:0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2/revocation/did%3Asmid%3A86671ea742104ba6ec59708fcca6cec0/urn%3Auuid%3A1256918c-573a-412b-943f-9ec389c0b9de",
+        "type": "EthereumRevocationRegistry2026",
+        "revocationRegistry": "0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2",
+        "revocationMethod": "DIDRegistry.isCredentialRevoked(string,string)"
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "created": "2026-11-09T17:56:25.442Z",
+        "verificationMethod": "did:smid:86671ea742104ba6ec59708fcca6cec0#key-1",
+        "proofPurpose": "assertionMethod",
+        "@context": [
+          "https://www.w3.org/ns/credentials/v2",
+          "https://w3id.org/security/data-integrity/v2"
+        ],
+        "proofValue": "z3KByQdnzYZUzd7hXD5oKEYTgQjA2dkrokNh6kNZ1EfVjTHQR6a1XeE15sn2uG4Y86YUFyB9Q4cSgJUaV3FShMFi7"
+      }
+    }
+  },
+  "deployerNonceAfterSetup": 4,
+  "completedAt": "2026-11-09T17:56:39.268Z"
+}

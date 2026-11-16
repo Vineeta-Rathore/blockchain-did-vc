@@ -1,0 +1,57 @@
+﻿check_sepolia_run.js SHA-256 a067de485a4f6e77c79f4b247371e1612d47f610efd5da43b4a492f18f542eec
+ok   network identity baseline present [NETWORK_BASELINE]
+ok   every log line is valid JSON [JSON_FORMAT]
+ok   no row before the first header (0) [ORPHAN_ROWS]
+ok   1 invocation(s) in the log [INVOCATIONS_PRESENT]
+ok   no pilot row in the log [PILOT_ROWS; fatal]
+
+== invocation 1 (main, started 2026-11-12T02:10:41.036Z) ==
+ok   header: measure-sepolia.js, label run [CONFIG_SCRIPT_LABEL; fatal]
+ok   chain 11155111 [CONFIG_CHAIN; fatal]
+ok   commit 73b4cca16e7c (expected 73b4cca16e7c, not dirty) [CONFIG_COMMIT; fatal]
+ok   block lag 0 [CONFIG_BLOCK_LAG; fatal]
+ok   warm-up 2 and timed 10 iterations per block (expected 2 and 10) [CONFIG_ITERATIONS; fatal]
+ok   contract equals the deployment record [CONFIG_CONTRACT; fatal]
+ok   credential B equals the deployment record [CONFIG_CREDENTIAL; fatal]
+ok   deployer and nonce at the start (4) equal the record (4) [CONFIG_DEPLOYER_START; fatal]
+ok   provider label in the log: eth-sepolia.g.alchemy.com [CONFIG_PROVIDER; fatal]
+ok   node v22.10.0 (expected v22.10.0) [CONFIG_NODE; fatal]
+ok   ethers ethers/5.8.0 (expected ethers/5.8.0) [CONFIG_ETHERS; fatal]
+ok   time zone offset 330 min (IST = 330) [CONFIG_TIMEZONE; fatal]
+ok   keep-alive agents, first in first out [CONFIG_AGENTS; fatal]
+ok   request timeout 30000 ms (the default, 30000, as in the pilot) [CONFIG_TIMEOUT; fatal]
+ok   ten slots as fixed in the plan [CONFIG_SLOTS; fatal]
+ok   footer present (the process ended normally) [FOOTER_PRESENT]
+ok   deployer nonce unchanged at the end (4) [CONFIG_DEPLOYER_END; fatal]
+     finished 2026-11-12T14:30:23.416Z; new sockets in all 41
+ok   every row carries this invocation's run id (0 foreign) [FOREIGN_RUN_IDS; fatal]
+
+block  slot   started (IST)  delay  rows  usable timed rows P S C Bt  status
+    1  08:00  08:00:00         0 s    50   10  10  10  10        clean [6423 KB received in the minute of a tick (note only)]
+    2  09:20  09:20:00         0 s    50   10  10  10  10        clean
+    3  10:40  10:40:00         0 s    50   10  10  10  10        clean
+    4  12:00  12:00:00         0 s    50   10  10  10  10        clean
+    5  13:20  13:20:00         0 s    50   10  10  10  10        clean
+    6  14:40  14:40:00         0 s    50   10  10  10  10        clean
+    7  16:00  16:00:00         0 s    50   10  10  10  10        clean
+    8  17:20  17:20:00         0 s    50   10  10  10  10        clean
+    9  18:40  18:40:00         0 s    50   10  10  10  10        clean
+   10  20:00  20:00:00         0 s    50   10  10  10  10        clean
+
+== summary ==
+ok   monitor file: 742 ticks, 0 unreadable line(s) [MONITOR_FILE]
+ok   exactly one main invocation in the log (1) [MAIN_COUNT; fatal]
+ok   at most 2 reserve invocations (0) [RESERVE_COUNT; fatal]
+ok   every reserve slot is used at most once [RESERVE_SLOT_UNIQUE; fatal]
+ok   no block is repeated more than once [RESERVE_BLOCK_UNIQUE; fatal]
+blocks with a clean run: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 (10 of 10)
+blocks without a clean run: none
+reserve plan: none (no block failed)
+day rule (fixed before the run): 10 of 10 slots covered (8 needed; 0 represented by a repetition); usable timed rows in the primary P 100, S 100, C 100, Bt 100 (80 needed in each mode): THE DAY STANDS
+timed rows that succeeded, per mode (what the analysis counts): P 100, S 100, C 100, Bt 100 (100 each when ten blocks ran once without a failed row; a block repeated cleanly adds its rows)
+first and last Sepolia block read: 12115885 and 12119449
+network identity: the same at all 742 ticks
+monitor: 742 ticks from 07:40:31 to 20:00:23 IST; ticks with a gap over 90 s: 0; ticks not on mains: 0
+ok   self-scan of the log for parts of the RPC URL and banned strings: clean [LOG_SELF_SCAN]
+
+gate failures: 0; blocks not clean in any invocation: 0; blocks still without a clean run: none

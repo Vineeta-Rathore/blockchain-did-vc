@@ -13,3 +13,7 @@ test-transcripts/** -text
 
 # Shell scripts keep LF line endings, so bash runs them also on a Windows checkout.
 *.sh text eol=lf
+
+# The contract is published with the CRLF line endings it had when it was compiled and deployed, so that a build from any checkout
+# or from the release zip gives the deployed bytecode, metadata hash included, and the file matches its manifest line.
+contracts/DIDRegistry.sol text eol=crlf

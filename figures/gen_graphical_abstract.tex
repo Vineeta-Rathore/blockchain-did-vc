@@ -1,0 +1,76 @@
+% Graphical abstract (revised). Drawn at 100 mm x 120 mm (5:6), twice the 50 mm x 60 mm display size,
+% so the smallest text (12.5 pt here) prints at about 6.3 pt and most text at 6.5 pt or more at 50 mm x 60 mm.
+% Every number and statement, with its source:
+%   2.77 ms   pooled median, local in-process Hardhat EVM, 9 Nov 2026, 100 timed verifications
+%             (results/local_2026-11-09_n100.jsonl; Figure_3_stats.json written by gen_fig_3.py, median 2.76645).
+%   616.6 ms  pooled median, full verifier (mode P) on Sepolia, 12 Nov 2026, 100 usable of 100 rows, one client
+%             and one provider (results/run_2026-11-12/analysis_primary_output.txt line 30).
+%   3.3, 3.5  pooled medians of the per-iteration ratios S/C = 3.318 and S/Bt = 3.491 (same file, lines 34-37),
+%             12 Nov 2026, one client and one provider.
+%   164 tests passing at the archived commit 73b4cca16e7c, exit 0, 15 Nov 2026
+%             (test-transcripts/npm_test_73b4cca_2026-11-15.txt lines 215-217).
+%   Roles and calls: main.tex Section "System Overview and Actors"; verifier-service.js 152-224 (four reads at the
+%   block chosen at B0); DIDRegistry.sol (createDID; revokeCredential, onlyController).
+% Title: main.tex \title, verbatim.
+% Font: Helvetica (URW Nimbus Sans, Type 1, embedded). Colours: Okabe-Ito.
+% Round 4 (16 Nov 2026): result numbers at 20 pt and the statement at 12.5 pt so that the added qualifier fits.
+% Build: see build_all.sh (pdflatex, then pdftoppm -r 600 for the PNG).
+\documentclass[border=0pt]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage[scaled=1]{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+\pdfinfoomitdate=1 \pdftrailerid{} \pdfsuppressptexinfo=-1
+
+\definecolor{oiverm}{HTML}{D55E00}
+\definecolor{oisky}{HTML}{56B4E9}
+
+\newcommand{\fs}[1]{\fontsize{#1}{1.2\dimexpr#1pt\relax}\selectfont}
+
+\begin{document}
+\frenchspacing
+\begin{tikzpicture}[x=1mm,y=1mm,
+    actor/.style={draw=black, line width=0.9pt, rounded corners=1.5mm, fill=white, minimum width=26mm,
+                  minimum height=13mm, align=flush center, inner sep=0.8mm, anchor=north},
+    call/.style={-{Stealth[length=2.4mm,width=2mm]}, line width=1.1pt},
+    read/.style={-{Stealth[length=2.4mm,width=2mm]}, line width=1.1pt, dash pattern=on 2mm off 1.3mm},
+  ]
+  \useasboundingbox (0,0) rectangle (100,-120);
+
+  % Title band (verbatim title)
+  \fill[black!8] (0,0) rectangle (100,-24);
+  \node[anchor=north, text width=94mm, align=flush center, inner sep=0pt] at (50,-2.6)
+    {\fs{13.5}\bfseries Decentralised Identifier-Anchored Verifiable Credentials with
+     \textcolor{oiverm}{On-Chain Revocation} for Social Media Identity Management};
+
+  % Actors
+  \node[actor] (I) at (15,-27) {{\fs{14}\bfseries Issuer}\\{\fs{13}platform}};
+  \node[actor] (H) at (50,-27) {{\fs{14}\bfseries Holder}\\{\fs{13}user\vphantom{p}}};
+  \node[actor] (V) at (85,-27) {{\fs{14}\bfseries Verifier}\\{\fs{13}relying party}};
+  \draw[call] (I.east) -- (H.west) node[midway, above=1.3mm, inner sep=0pt] {\fs{13}VC};
+  \draw[call] (H.east) -- (V.west) node[midway, above=1.3mm, inner sep=0pt] {\fs{13}VC};
+
+  % Registry
+  \draw[line width=0.9pt, rounded corners=1.5mm, fill=oisky!20] (1.5,-53) rectangle (98.5,-66);
+  \node[anchor=north, inner sep=0pt, align=flush center] at (50,-54.6)
+    {{\fs{14}\bfseries DIDRegistry contract on Ethereum}\\[0.4mm]{\fs{13}DID records\quad\textbar\quad\textcolor{oiverm}{\bfseries revocation records}}};
+  \draw[call] (9,-40) -- (9,-53);
+  \node[anchor=west, inner sep=0pt, align=flush left] at (11,-46.5) {\fs{13}register DID,\\\fs{13}\textcolor{oiverm}{revoke VC}};
+  \draw[read] (91,-40) -- (91,-53);
+  \node[anchor=east, inner sep=0pt, align=flush right] at (89,-46.5) {\fs{13}4 reads at\\\fs{13}one block};
+
+  % Results
+  \node[anchor=north west, inner sep=0pt] at (2,-68)
+    {\fs{13}\bfseries Full verification: pooled median, \textit{n} = 100};
+  \draw[line width=0.7pt, rounded corners=1.2mm] (1.5,-73) rectangle (48.5,-91.8);
+  \draw[line width=0.7pt, rounded corners=1.2mm] (51.5,-73) rectangle (98.5,-91.8);
+  \node[anchor=north, inner sep=0pt, align=flush center] at (25,-75)
+    {{\fs{20}\bfseries 2.77 ms}\\[0.8mm]{\fs{12.5}local in-process EVM}\\{\fs{12.5}9 Nov 2026}};
+  \node[anchor=north, inner sep=0pt, align=flush center] at (75,-75)
+    {{\fs{20}\bfseries 616.6 ms}\\[0.8mm]{\fs{12.5}Sepolia, one client}\\{\fs{12.5}12 Nov 2026}};
+  \node[anchor=north west, inner sep=0pt, text width=96mm, align=flush left] at (2,-94.3)
+    {\fontsize{12.5}{13.75}\selectfont Sequential Sepolia reads took about 3.3 times as long as concurrent reads and 3.5 times as long as batched reads on 12 November 2026, one client and one provider.\\[0.6mm]
+     164 tests pass at the archived commit.};
+\end{tikzpicture}
+\end{document}

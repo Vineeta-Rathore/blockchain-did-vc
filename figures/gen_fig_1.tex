@@ -1,0 +1,92 @@
+% Figure 1: system architecture.
+% Hand-specified diagram, no data input. Sources checked:
+%  - actors, agents and wallet: main.tex, Section "System Overview and Actors" and the application scenario;
+%  - holder binding: main.tex ("presents the credential itself, without a verifiable presentation");
+%  - controller functions and pause scope: contracts/DIDRegistry.sol (createDID 261-266 whenNotPaused;
+%    updateDID 300-308, reactivateDID 343-347, changeController 365-371, acceptController 390-394, rotateKey 445-452:
+%    whenNotPaused; deactivateDID 327-330, cancelControllerChange 420-423, revokeCredential 542-548: not paused,
+%    onlyController; repeated revocation reverts 551-554; pause/unpause 728-733 and addAdmin/removeAdmin 713-718:
+%    onlyAdmin);
+%  - verifier reads: src/vc/verifier-service.js 152-224 (B0 block number; verifyDID twice,
+%    getDIDDocument, isCredentialRevoked, all at that block);
+%  - subject DID registered by its own controller: scripts/measure-local.js 83-84;
+%  - administrator powers and limits: main.tex, Section "Registry Administration and Decentralisation".
+% Built at its printed width: main.tex includes it at \columnwidth = 504.50787 pt (Times1COL), scale 1.0.
+% Fonts: Times (mathptmx) and Courier (pcr), as in the manuscript.
+% Build: see build_all.sh (pdflatex gen_fig_1.tex, output copied to Figure_1.pdf).
+\documentclass[border=0pt]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}
+\renewcommand{\ttdefault}{pcr}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+\pdfinfoomitdate=1 \pdftrailerid{} \pdfsuppressptexinfo=-1
+
+% Okabe-Ito colours
+\definecolor{oiverm}{HTML}{D55E00}
+\definecolor{oisky}{HTML}{56B4E9}
+
+\newcommand{\fn}[1]{{\fontsize{7}{8.5}\selectfont\ttfamily #1}}
+\newcommand{\lab}{\fontsize{7.5}{9}\selectfont}
+\newcommand{\head}{\fontsize{8.5}{10}\selectfont\bfseries}
+
+\begin{document}
+\frenchspacing
+\begin{tikzpicture}[x=1pt,y=1pt,
+    actor/.style={draw=black, line width=0.6pt, rounded corners=2pt, fill=white, anchor=north west,
+                  minimum width=124pt, minimum height=52pt, text width=116pt, align=flush center, inner sep=4pt},
+    call/.style={-{Stealth[length=4.5pt,width=3.6pt]}, line width=0.7pt},
+    read/.style={-{Stealth[length=4.5pt,width=3.6pt]}, line width=0.7pt, dash pattern=on 3pt off 2pt},
+    note/.style={anchor=north west, inner sep=0pt, align=flush left},
+  ]
+  \useasboundingbox (0,0) rectangle (504.5,-236);
+
+  % Actors (off-chain)
+  \node[actor] (I) at (0,0)
+    {{\head Issuer}\\{\lab social media platform}\\[1pt]{\lab Issuer Agent signs VCs; the Ed25519 private key stays off-chain}};
+  \node[actor] (H) at (190.25,0)
+    {{\head Holder}\\{\lab platform user}\\[1pt]{\lab Identity Wallet stores the VC; the VC names the holder's DID}};
+  \node[actor] (V) at (380.5,0)
+    {{\head Verifier}\\{\lab relying party}\\[1pt]{\lab Verifier Agent runs V1 to V8 (Figure~2) on the VC}};
+
+  % Horizontal transfers
+  \draw[call] (I.east) -- (H.west)
+    node[midway, above=1pt, inner sep=1pt, align=flush center] {\lab signed VC\\\fn{eddsa-jcs-2022}};
+  \draw[call] (H.east) -- (V.west)
+    node[midway, above=1pt, inner sep=1pt, align=flush center] {\lab presents the VC\\\lab no holder binding};
+
+  % Registry (on-chain)
+  \def\rt{-108}
+  \draw[line width=0.8pt, rounded corners=2pt, fill=black!4] (0,\rt) rectangle (504.5,\rt-78);
+  \node[note] at (6,\rt-5)
+    {{\head DIDRegistry contract} {\lab on Ethereum (local Hardhat EVM, or the Sepolia test network). Its records are public and permanent.}};
+  \draw[line width=0.5pt, rounded corners=1.5pt, fill=oisky!22] (6,\rt-19) rectangle (247,\rt-72);
+  \node[note, text width=233pt] at (10,\rt-23)
+    {{\lab\bfseries DID records}{\lab, keyed by DID string}\\[1pt]
+     {\lab Controller, active flag, verification methods (Multikey), services, timestamps and data hash. Only the controller changes them; a handover also needs the successor to accept.}};
+  \draw[line width=0.5pt, rounded corners=1.5pt, fill=oiverm!14] (257.5,\rt-19) rectangle (498.5,\rt-72);
+  \node[note, text width=233pt] at (261.5,\rt-23)
+    {{\lab\bfseries Revocation records}{\lab, keyed by issuer DID and credential ID}\\[1pt]
+     {\lab Time, reason code and flag. Only the issuer DID's controller writes them; a repeated revocation reverts.}};
+
+  % Issuer controller transactions (solid)
+  \draw[call] (24,0 |- I.south) -- (24,\rt);
+  \node[note, text width=150pt] at ([yshift=-5pt]30,0 |- I.south)
+    {{\lab Controller transactions:}\\ \fn{createDID}, \fn{updateDID}, \fn{rotateKey},\\ \fn{deactivateDID}, \fn{revokeCredential}};
+  % Holder registers the subject DID (solid)
+  \draw[call] (214.25,0 |- H.south) -- (214.25,\rt);
+  \node[note, text width=150pt] at ([yshift=-5pt]220.25,0 |- H.south)
+    {{\lab Controller transaction:}\\ \fn{createDID} {\lab for the subject DID}};
+  % Verifier reads (dashed)
+  \draw[read] (394,0 |- V.south) -- (394,\rt);
+  \node[note, text width=104pt] at ([yshift=-5pt]400,0 |- V.south)
+    {{\lab Reads at the B0 block:}\\ \fn{verifyDID} {\lab (V2, V3)}\\ \fn{getDIDDocument} {\lab (V5)}\\ \fn{isCredentialRevoked} {\lab (V7)}};
+
+  % Administrator
+  \node[actor, minimum height=30pt, minimum width=124pt] (A) at (0,-202)
+    {{\head Administrator}\\{\lab owner and added administrators}};
+  \draw[call] (24,-202) -- (24,\rt-78);
+  \node[note, text width=364pt] at (140.5,-204)
+    {{\lab \fn{pause}, \fn{unpause}, \fn{addAdmin}, \fn{removeAdmin}. A pause stops registration, document updates, key rotation, reactivation and controller handover; revocation and deactivation remain open. Administrators cannot change keys, documents or revocation records.}};
+\end{tikzpicture}
+\end{document}

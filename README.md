@@ -6,7 +6,10 @@ Verifiable Credentials with `eddsa-jcs-2022` proofs, a verifier that checks a cr
 scripts and raw logs behind the paper's measurements. It covers the DID and credential layers only; it does not
 implement verifiable presentations, holder binding or zero-knowledge selective disclosure.
 
-This is version 1.1.0. What changed since version 1.0.0 is listed in [`CHANGELOG.md`](CHANGELOG.md).
+This is version 1.1.0 (DOI [10.5281/zenodo.24263442](https://doi.org/10.5281/zenodo.24263442)). What changed since
+version 1.0.0 is listed in [`CHANGELOG.md`](CHANGELOG.md). The measurement code was frozen at commit `73b4cca16e7c`
+before the Sepolia run of 12 November 2026; the logs, the run tools and the figure builders were added after the run,
+without changing that code.
 
 ## Contents
 
@@ -18,6 +21,7 @@ This is version 1.1.0. What changed since version 1.0.0 is listed in [`CHANGELOG
 - [Issuing and verifying credentials](#issuing-and-verifying-credentials)
 - [Gas on two schedules](#gas-on-two-schedules)
 - [Reproducing the numbers](#reproducing-the-numbers)
+- [Reproducing the paper's numbers and figures](#reproducing-the-papers-numbers-and-figures)
 - [Sepolia scripts and secrets](#sepolia-scripts-and-secrets)
 - [Limits](#limits)
 - [Standards](#standards)
@@ -31,7 +35,7 @@ own version.
 
 | Version | Contract on Ethereum Sepolia (chain ID 11155111) | Revocation interface | Measurements |
 |---|---|---|---|
-| 1.1.0 | (to be added: address and deployment date) | `revokeCredential(string,string,uint8)`; event `CredentialRevoked(string indexed didId, string indexed credentialId, uint8 reasonCode, uint256 timestamp)` | `results/sepolia_v1.1_deployment.json`, the logs named in [`results/README.md`](results/README.md) |
+| 1.1.0 | `0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2`, created 9 November 2026 (block 12,099,140) | `revokeCredential(string,string,uint8)`; event `CredentialRevoked(string indexed didId, string indexed credentialId, uint8 reasonCode, uint256 timestamp)` | `results/sepolia_v1.1_deployment.json`, the logs named in [`results/README.md`](results/README.md) |
 | 1.0.0 (superseded) | `0x5f9017208f3F4A97657E2b32BE433a2641DFEF07`, created 21 July 2026 | `revokeCredential(string,string,string)`; event `CredentialRevoked(string indexed didId, string indexed credentialId, string reason, uint256 timestamp)` | `results/sepolia_2026-07-21_n20.jsonl` |
 
 The ABI of version 1.1.0 is in `artifacts/contracts/DIDRegistry.sol/DIDRegistry.json` after `npx hardhat compile`.
@@ -47,7 +51,10 @@ does not reproduce its bytecode; its interface is the version 1.0.0 ABI ([`resul
   `scripts/plot-latency.py`: `python3 -m pip install -r requirements.txt` (numpy 1.26.2, matplotlib 3.10.5; tested
   with Python 3.12.2). On Windows the command is `python` or `py -3`; the commands below write `python3`.
 - For the Sepolia scripts only: an Ethereum Sepolia JSON-RPC endpoint; for `deploy-sepolia.js` also a funded Sepolia
-  test key (never a key that holds real funds).
+  test key (never a key that holds real funds). The run checker and the analysis of the published logs need no
+  endpoint and send no request.
+- For the figures only: pdflatex, pdfinfo, pdffonts and pdftoppm (tested with TeX Live 2024) and the Python packages
+  in `figures/requirements.txt`; on Windows, `bash` from Git for Windows.
 
 ## Quick start
 
@@ -97,6 +104,13 @@ scripts/
 results/
   README.md                    what each log measured, with which script, contract and version
   *.jsonl, *.json              raw logs and the deployment record
+  run_2026-11-12/              verdict, checker report and analysis of the Sepolia run; monitor summary and its script
+  r2.1_local_comparison/       the earlier test and the revised harness, both run on the version 1.0.0 code
+run_day/                       the rules and tools of the Sepolia run, as fixed before it (byte for byte)
+  MANIFEST_SUBSET.sha256       the manifest lines of the published run-day files
+  tests/                       tests of the run checker and of the run tools
+figures/                       builders of Figures 1 to 3 and of the graphical abstract (output in figures/out/)
+test-transcripts/              the npm test run at the archived commit 73b4cca
 ```
 
 ## The registry
@@ -216,8 +230,9 @@ take a full slot each, and the delegation and attribute functions, which grant n
 code and so to the deployment gas. The deployment needs more gas than the 16,777,216 that EIP-7825 allows a
 transaction; Sepolia accepts it because EIP-8037 meters the state gas outside that cap (checked with `eth_simulateV1`
 with validation, and with transactions of 20 to 30 million gas mined on Sepolia on 9 November 2026). The three EIPs
-were in Last Call at that date and may still change before they reach mainnet. The gas of the actual Sepolia deployment is in `results/sepolia_v1.1_deployment.json`
-(to be added).
+were in Last Call at that date and may still change before they reach mainnet. The gas of the actual Sepolia deployment
+of 9 November 2026 is in `results/sepolia_v1.1_deployment.json`: 21,692,728, 3,009,361, 2,139,071 and 138,811 for the
+four transactions, the values of the Glamsterdam column.
 
 ## Reproducing the numbers
 
@@ -226,9 +241,11 @@ were in Last Call at that date and may still change before they reach mainnet. T
 | Test count | `npm test` | console |
 | Gas, both schedules | `npm run measure-gas` | console (JSON) |
 | Gas for the deployment's own inputs | `GAS_INPUTS=results/sepolia_v1.1_deployment.json npx hardhat run scripts/measure-gas.js` | console (JSON) |
-| Local verification latency | five runs of `LOCAL_LOG=results/local_<date>_n100.jsonl PROCESS_INDEX=<k> npx hardhat run scripts/measure-local.js`, k = 1 to 5, then `node scripts/analyze-latency.js <log>` | `results/local_<date>_n100.jsonl` (to be added) |
-| Sepolia verification latency | `node scripts/measure-sepolia.js --deployment results/sepolia_v1.1_deployment.json --log <log> --env <file>`, then `node scripts/analyze-latency.js <log>` | `results/sepolia_<date>_n100.jsonl` (to be added) |
-| Latency figure | `python3 scripts/plot-latency.py <local log>` | (to be added) |
+| Local verification latency | five runs of `LOCAL_LOG=results/local_<date>_n100.jsonl PROCESS_INDEX=<k> npx hardhat run scripts/measure-local.js`, k = 1 to 5, then `node scripts/analyze-latency.js <log>` | `results/local_2026-11-09_n100.jsonl` |
+| Sepolia verification latency | `node scripts/measure-sepolia.js --deployment results/sepolia_v1.1_deployment.json --log <log> --env <file>`, then `node scripts/analyze-latency.js <log>` | `results/sepolia_2026-11-12_n100.jsonl` |
+| Sepolia analysis of the paper | `node run_day/analysis_primary.js ...` (see the next section) | `results/run_2026-11-12/analysis_primary_output.txt` |
+| Latency figure, quick plot | `python3 scripts/plot-latency.py results/local_2026-11-09_n100.jsonl --out <file.pdf> --expect-n 100` | the file given with `--out` |
+| Figures of the paper | `bash figures/build_all.sh` (see the next section) | `figures/out/` |
 | July 2026 figures (version 1.0.0) | `node scripts/analyze-latency.js results/sepolia_2026-07-21_n20.jsonl` | `results/sepolia_2026-07-21_n20.jsonl` |
 | Statistics against numpy | `python3 scripts/check_stats_numpy.py` | console |
 
@@ -254,6 +271,100 @@ records a checkout that differs from its commit. `scripts/lib/stats.js` defines 
 rule, the nearest-rank 95th percentile, an order-statistic confidence interval for the median (of the rows, or of the
 process or block medians), and a seeded percentile bootstrap for paired speed-ups. Each log, and what produced it, is described in
 [`results/README.md`](results/README.md).
+
+## Reproducing the paper's numbers and figures
+
+Every command runs from the repository root and works offline. The commands are written for `bash`; in PowerShell,
+write `(Get-Location).Path` for `"$(pwd)"`. The run-day scripts need `--root` as an absolute path.
+
+Tests. `npm test` runs the 164 tests; `test-transcripts/npm_test_73b4cca_2026-11-15.txt` is the run at the archived
+commit (164 passing, exit 0). The run checker and the run tools have their own tests:
+
+```bash
+node run_day/tests/test_consistency.js "$(pwd)"
+node run_day/tests/test_check_sepolia_run.js "$(pwd)" "$(pwd)/results/sepolia_v1.1_deployment.json"
+```
+
+The first gives 55 checks and the second 301 scenarios (about three minutes); both make their own fake inputs. One
+consistency check compares `contracts/DIDRegistry.sol` with the hash of the authors' Windows checkout, which has CRLF
+line endings, so on a checkout with LF line endings that one check fails (see `run_day/MANIFEST_SUBSET.sha256`).
+
+Analysis of the Sepolia run. This reads the closed log and the final verdict and writes the tables of the paper:
+
+```bash
+node run_day/analysis_primary.js --root "$(pwd)" --log results/sepolia_2026-11-12_n100.jsonl \
+  --verdict results/run_2026-11-12/verdict_final.json --out analysis_summary.json > analysis_primary_output.txt
+```
+
+Both outputs equal `results/run_2026-11-12/analysis_primary_output.txt` and `analysis_summary.json` byte for byte
+(checked on 16 November 2026 with Node.js 22.10.0 on Windows 11).
+
+The run checker. `run_day/check_sepolia_run.js` wrote `results/run_2026-11-12/verdict_final.json` and
+`check_final.txt` from the log, the deployment record and the raw monitor file. The raw monitor file is not published,
+so the verdict cannot be recomputed from this repository. Running the checker with `--no-monitor` is no substitute: it
+skips the sleep and network rules and gives a different verdict. The checker reads one line of an env file, only to
+check the provider host and to scan the log for parts of the RPC URL; it sends no request. A file with the host alone
+is enough, and no real URL or key is needed:
+
+```bash
+printf 'SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com\n' > .env.provider-host
+node run_day/check_sepolia_run.js --root "$(pwd)" --env .env.provider-host \
+  --deployment results/sepolia_v1.1_deployment.json --log results/sepolia_2026-11-12_n100.jsonl \
+  --monitor <run_monitor.jsonl> --blocks-json verdict.json
+```
+
+With the raw monitor file, this command gave on 16 November 2026 the report of `check_final.txt` line for line (that
+file was saved from PowerShell, with a byte order mark and CRLF line endings) and the verdict of `verdict_final.json`
+except its `evaluated_at` time. The monitor summary in `results/run_2026-11-12/` was made from the same raw file with
+`python3 results/run_2026-11-12/make_monitor_summary.py <run_monitor.jsonl> results/sepolia_2026-11-12_n100.jsonl
+--out monitor_summary.json --md monitor_summary.md`.
+
+Figures. `figures/build_all.sh` builds Figures 1 to 3 and the graphical abstract into `figures/out/` (or a folder
+given as its argument). It reads only the four sources in `figures/` and, for Figure 3,
+`results/local_2026-11-09_n100.jsonl`, whose SHA-256 it checks:
+
+```bash
+python3 -m pip install -r figures/requirements.txt
+bash figures/build_all.sh
+```
+
+Figures 1 and 2 and the graphical abstract are hand-specified diagrams with no data input. Figure 3 shows only the local
+log of 9 November 2026. On 16 November 2026 (Windows 11, TeX Live 2024, Python 3.12.2, matplotlib 3.10.5) the build
+gave the submitted files byte for byte:
+
+| Output | SHA-256 |
+|---|---|
+| `Figure_1.pdf` | `0fefcc40d1ba7f974a2f1e17b03b3e6be877d9736583c78f94c899b13f924636` |
+| `Figure_2.pdf` | `86052bc41593626da38707e246d2095c67f8f5302f699e3691b3a27b5617ca7f` |
+| `Figure_3.pdf` | `b78ed8c0efd321807355ecdb235ef04ac9b4302eb5158b3e96081b2b798d6484` |
+| `Graphical_Abstract.pdf` | `915ba31a8ef4a0a65808fa4616aea887047ceea04878152bd39e6d6d0b553475` |
+| `Graphical_Abstract.png` | `8d586ec585a4313168d50cdfd5fb020070390ba396d3564525eb5f78340eac40` |
+| `Figure_3_stats.json` | `1e289ef834457acf6e586e4d90f5d176415422053e1dddb8fa9bb5fb8fd9b4c5` |
+
+`Figure_3_stats.json` is now written with LF line endings; apart from that it equals the file written for the
+submission. Other TeX or font versions may change the PDF bytes but not the statistics.
+
+What is published. The timed local log of 9 November 2026; the closed Sepolia log of 12 November 2026; the deployment
+record; the output of the unchanged earlier test and the log of the revised harness on the earlier code
+(`results/r2.1_local_comparison/`); the run-day rules (the pre-registration addendum and the run tools) with their
+manifest lines; the run checker and its tests; the final verdict, the checker report and the analysis output; a
+sanitised summary of the network monitor; the figure builders; and the transcript of the test run at the archived
+commit. SHA-256 values are in [`results/README.md`](results/README.md) and `run_day/MANIFEST_SUBSET.sha256`.
+
+What is not published. The raw monitor file and the wrapper log of the run stay with the authors. They hold local
+paths, the range of the default gateway and salted hashes of the gateway and the network name, and the salt was kept
+on the same laptop. The other files of the run folder (the preflight report, the process list, the console and hash
+notes) and the salt file are withheld for the same reason. Two
+internal planning files listed in the run-day manifest and the two e-mails that carried the hashes are not published
+either. The editor can ask the authors for any of these.
+
+Default local paths. The files in `run_day/` are published byte for byte, because their SHA-256 values were fixed before
+the run, so they still carry paths of the authors' laptop as default arguments and in examples: a folder in the user
+profile for the live output, the authors' env file and the authors' copy of this repository. These defaults are local
+paths of the authors' laptop and mean nothing elsewhere. Pass your own paths with the parameters of the PowerShell
+scripts (`-Artifact`, `-EnvFile`, `-OutDir`). `run_day/tests/test_wrapper.ps1` sets the repository folder in its line 21
+and takes no parameter, so it runs elsewhere only from an edited copy. No file holds a key or an RPC URL path; the test
+files use fake tokens marked `TESTONLY`.
 
 ## Sepolia scripts and secrets
 
@@ -341,7 +452,8 @@ How secrets are handled:
 
 ## Citing
 
-Please cite the archived release of version 1.1.0 (DOI to be added) or use [`CITATION.cff`](CITATION.cff). Once the
+Please cite the archived release of version 1.1.0, DOI
+[10.5281/zenodo.24263442](https://doi.org/10.5281/zenodo.24263442), or use [`CITATION.cff`](CITATION.cff). Once the
 paper is published, please cite the paper as the primary reference. Version 1.0.0 (DOI 10.5281/zenodo.21515958) is
 superseded by this version.
 

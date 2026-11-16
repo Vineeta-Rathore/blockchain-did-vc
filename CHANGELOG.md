@@ -1,6 +1,19 @@
 # Changelog
 
-## 1.1.0 (release date to be added)
+## 1.1.0 (16 November 2026)
+
+Archived release: DOI 10.5281/zenodo.24263442, a new version of the version 1.0.0 record.
+
+### Frozen code, then results
+
+- The measurement code was frozen at commit `73b4cca16e7c` before the Sepolia run of 12 November 2026. The branch
+  `frozen-v1.1.0` points at that commit, and the header of the run log names it.
+- After the run, these were added without changing that code: the logs and the deployment record (`results/`), the
+  verdict, checker report, analysis output and monitor summary of the run (`results/run_2026-11-12/`), the earlier test
+  and the revised harness on the version 1.0.0 code (`results/r2.1_local_comparison/`), the run rules and tools with
+  their manifest lines (`run_day/`), the figure builders (`figures/`) and the test transcript at the frozen commit
+  (`test-transcripts/`), with this file, the READMEs, the citation metadata, `.gitattributes` and `.gitignore`.
+- The Sepolia contract of version 1.1.0 is `0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2`, deployed on 9 November 2026.
 
 ### Registry (`contracts/DIDRegistry.sol`)
 
@@ -126,5 +139,5 @@ These changes alter the interface, so version 1.0.0 clients cannot call a versio
 
 ## 1.0.0 (24 July 2026)
 
-First archived release (DOI 10.5281/zenodo.21515958), now superseded. Its contract on Sepolia is
+First archived release (DOI 10.5281/zenodo.21515958), now superseded by version 1.1.0. Its contract on Sepolia is
 `0x5f9017208f3F4A97657E2b32BE433a2641DFEF07`; its measurements are described in `results/README.md`.

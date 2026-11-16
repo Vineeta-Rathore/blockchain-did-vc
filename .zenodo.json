@@ -1,10 +1,11 @@
 {
   "title": "Decentralised Identifier-Anchored Verifiable Credentials with On-Chain Revocation for Social Media Identity Management",
-  "description": "Reference implementation of an Ethereum registry of DID documents with per-credential revocation keyed by the issuer DID (Solidity), a Node.js service that issues W3C Verifiable Credentials with eddsa-jcs-2022 proofs (Ed25519, Multikey), a verifier that checks a credential against the registry with all reads pinned to one block, and the scripts and raw logs behind the measurements. Version 1.1.0: a pause no longer blocks revocation or deactivation; revocations carry an RFC 5280 reason code; administrator actions emit events; a controller handover needs the new address's acceptance; the registry stores no copies, which lowers the gas of revocation and DID creation; validFrom is checked; proofs follow eddsa-jcs-2022 section 3.3 and reproduce the W3C test vector; gas is reported for the osaka schedule and for the schedule Sepolia has used since 6 October 2026; 164 tests.",
+  "description": "Reference implementation of an Ethereum registry of DID documents with per-credential revocation keyed by the issuer DID (Solidity), a Node.js service that issues W3C Verifiable Credentials with eddsa-jcs-2022 proofs (Ed25519, Multikey), a verifier that checks a credential against the registry with all reads pinned to one block, and the scripts, logs and tools behind the paper's measurements. Version 1.1.0: a pause no longer blocks revocation or deactivation; revocations carry an RFC 5280 reason code; administrator actions emit events; a controller handover needs the new address's acceptance; the registry stores no copies, which lowers the gas of revocation and DID creation; validFrom is checked; proofs follow eddsa-jcs-2022 section 3.3 and reproduce the W3C test vector; gas is reported for the osaka schedule and for the schedule Sepolia has used since 6 October 2026; 164 tests. The measurement code was frozen at commit 73b4cca16e7c before the Sepolia run of 12 November 2026. Added after the run, without changing that code: the timed local log of 9 November 2026; the closed Sepolia log of 12 November 2026; the v1.1.0 deployment record (contract 0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2 on Sepolia); the output of the unchanged earlier test and the log of the revised harness on the earlier code; the run-day rules (the pre-registration addendum and the run tools) with the manifest lines of the published files; the run checker and its tests; the final verdict and the analysis output; a sanitised summary of the network monitor; the figure scripts; and the transcript of the test run at the archived commit. The raw monitor and wrapper logs remain with the authors.",
   "upload_type": "software",
   "access_right": "open",
   "license": "MIT",
   "version": "1.1.0",
+  "publication_date": "2026-11-16",
   "creators": [
     {
       "name": "Rathore, Vineeta",
@@ -26,5 +27,13 @@
     "smart contracts",
     "Ed25519",
     "eddsa-jcs-2022"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "10.5281/zenodo.21515958",
+      "relation": "isNewVersionOf",
+      "scheme": "doi",
+      "resource_type": "software"
+    }
   ]
 }

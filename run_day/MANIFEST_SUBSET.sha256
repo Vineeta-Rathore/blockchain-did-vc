@@ -17,7 +17,9 @@
 # conversion (see .gitattributes), so their bytes are the same on every system. contracts/DIDRegistry.sol and the
 # scripts were committed at 73b4cca with LF line endings. The manifest hashed the authors' Windows checkout, in which
 # git wrote contracts/DIDRegistry.sol with CRLF line endings: its line matches after converting LF to CRLF. The five
-# scripts have LF endings in that checkout too, so their lines match as committed.
+# scripts have LF endings in that checkout too, so their lines match as committed. The release zip and a checkout
+# without line-ending conversion hold the contract with LF endings. To check it against its line:
+#   python3 -c "import hashlib; b = open('contracts/DIDRegistry.sol', 'rb').read().replace(b'\r\n', b'\n'); print(hashlib.sha256(b.replace(b'\n', b'\r\n')).hexdigest())"
 #
 2a4e07578c99c015bf6618a5c76b8149aadeebd8835b0fc632d9d6aef35060a3     24883  artifact_v1.1/contracts/DIDRegistry.sol  =>  contracts/DIDRegistry.sol
 50bbf111484522a0adfee4d928dc51545acc8b8054989b3274e44128483c31d1      6498  artifact_v1.1/results/sepolia_v1.1_deployment.json  =>  results/sepolia_v1.1_deployment.json

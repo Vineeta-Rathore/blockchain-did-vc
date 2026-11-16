@@ -287,7 +287,8 @@ node run_day/tests/test_check_sepolia_run.js "$(pwd)" "$(pwd)/results/sepolia_v1
 
 The first gives 55 checks and the second 301 scenarios (about three minutes); both make their own fake inputs. One
 consistency check compares `contracts/DIDRegistry.sol` with the hash of the authors' Windows checkout, which has CRLF
-line endings, so on a checkout with LF line endings that one check fails (see `run_day/MANIFEST_SUBSET.sha256`).
+line endings. The release zip and checkouts without line-ending conversion have LF line endings, so there that one
+check fails; `run_day/MANIFEST_SUBSET.sha256` shows how to check the contract against its manifest line.
 
 Analysis of the Sepolia run. This reads the closed log and the final verdict and writes the tables of the paper:
 

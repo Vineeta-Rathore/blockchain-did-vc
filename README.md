@@ -361,7 +361,9 @@ either. The editor can ask the authors for any of these.
 
 Default local paths. The files in `run_day/` are published byte for byte, because their SHA-256 values were fixed before
 the run, so they still carry paths of the authors' laptop as default arguments and in examples: a folder in the user
-profile for the live output, the authors' env file and the authors' copy of this repository. These defaults are local
+profile for the live output, the authors' env file and the authors' copy of this repository. They also carry the
+corresponding author's e-mail address, the recorded setup (city, phone model and carrier) and the masked range of the
+default gateway (10.25.x.x), which the paper also states. No other personal data is in them. These defaults are local
 paths of the authors' laptop and mean nothing elsewhere. Pass your own paths with the parameters of the PowerShell
 scripts (`-Artifact`, `-EnvFile`, `-OutDir`). `run_day/tests/test_wrapper.ps1` sets the repository folder in its line 21
 and takes no parameter, so it runs elsewhere only from an edited copy. No file holds a key or an RPC URL path; the test

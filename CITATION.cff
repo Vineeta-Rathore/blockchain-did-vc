@@ -19,19 +19,20 @@ authors:
     orcid: "https://orcid.org/0000-0003-4158-9782"
     affiliation: "Department of Computer Science and Engineering, Medicaps University, Indore, India"
 license: MIT
-# The DOI was reserved on Zenodo on 16 November 2026; it resolves once the record is published.
-doi: "10.5281/zenodo.24263442"
+doi: "10.5281/zenodo.24451811"
 identifiers:
   - type: doi
+    value: "10.5281/zenodo.24451811"
+    description: "Version 1.1.1, archived on Zenodo"
+  - type: doi
     value: "10.5281/zenodo.24263442"
-    description: "Version 1.1.0, archived on Zenodo"
+    description: "Version 1.1.0, archived on Zenodo (same contract, code, tests and logs)"
   - type: doi
     value: "10.5281/zenodo.21515957"
     description: "All versions of this software on Zenodo (concept DOI)"
 repository-code: "https://github.com/Vineeta-Rathore/blockchain-did-vc"
-version: "1.1.0"
-# Planned release date. If the Zenodo record is published on another day, change it to that day.
-date-released: "2026-11-16"
+version: "1.1.1"
+date-released: "2026-11-23"
 keywords:
   - "decentralised identifiers"
   - "verifiable credentials"

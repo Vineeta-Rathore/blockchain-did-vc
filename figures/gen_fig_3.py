@@ -13,8 +13,14 @@ The statistics drawn are written to Figure_3_stats.json and compared with the va
 which are written below (EXPECTED); any mismatch stops the build.
 
 Text is set by pdflatex through Matplotlib's pgf backend with mathptmx (Times), the manuscript's body font, so
-the PDF embeds Type 1 fonts. pdflatex must be on PATH. The figure is drawn at its printed width (main.tex:
-0.82\\columnwidth = 413.70 TeX pt), so it is placed at scale 1.0.
+the PDF embeds Type 1 fonts. pdflatex must be on PATH. The figure is drawn at its printed width (the
+manuscript: \\columnwidth = 504.51 TeX pt), so it is placed at scale 1.0.
+
+Encoding shared with Figure 2: a blue circle (#0072B2) marks a step that sends
+a request to the node (NODE_STEPS, the same five steps as Figure 2) and an orange square (#E69F00) a step computed in
+the verifier. Layout and fonts only were changed on 22 November 2026; the statistics are unchanged, and
+Figure_3_stats.json is byte-identical to the file of the submitted figure. The points of panel (a) are open grey
+(#595959) circles, so that the blue circle keeps its single meaning.
 
 Usage, from the repository root: python3 figures/gen_fig_3.py [--out-dir DIR]   (default: figures/out)
 """
@@ -55,7 +61,7 @@ EXPECTED = {
     },
 }
 
-# Step names as in the enumerated list of main.tex (Credential Verification Pipeline).
+# Step names as in the enumerated list of the manuscript (Credential Verification Pipeline).
 STEPS = [("V1", "V1 Structure and dates"), ("B0", "B0 Select block"), ("V2", "V2 Issuer DID liveness"),
          ("V3", "V3 Subject DID liveness"), ("V4", "V4 Validity window"), ("V5", "V5 Key resolution"),
          ("V6", "V6 Signature verification"), ("V7", "V7 Revocation check"), ("V8", "V8 Accept")]
@@ -63,11 +69,12 @@ NODE_STEPS = {"B0", "V2", "V3", "V5", "V7"}  # steps that send a request to the 
 
 # Okabe-Ito
 BLUE, ORANGE, BLACK = "#0072B2", "#E69F00", "#000000"
-GREY, GRID = "#4D4D4D", "#D9D9D9"
+GREY, GRID = "#595959", "#D9D9D9"
 GOLDEN = (math.sqrt(5) - 1) / 2
-TEXT_PT = 504.50787 * 0.82          # printed width in TeX points
+TEXT_PT = 504.50787                 # printed width in TeX points (\columnwidth)
 WIDTH_IN = TEXT_PT / 72.27
-HEIGHT_IN = 2.55
+HEIGHT_IN = 2.7
+MARKER = 4.5                        # marker size in points, panel (b) and its legend
 
 
 def q7(s, p):
@@ -129,7 +136,7 @@ def style(ax):
     for side in ("left", "bottom"):
         ax.spines[side].set_linewidth(0.6)
         ax.spines[side].set_color(BLACK)
-    ax.tick_params(width=0.6, length=2.5, colors=BLACK, labelsize=7.5, pad=2)
+    ax.tick_params(width=0.6, length=2.5, colors=BLACK, labelsize=8, pad=2)
     ax.set_axisbelow(True)
 
 
@@ -159,14 +166,14 @@ def main():
                                    r"\pdfinfoomitdate=1", r"\pdftrailerid{}", r"\pdfsuppressptexinfo=-1"]),
         "font.family": "serif",
         "font.size": 8,
-        "axes.labelsize": 8,
-        "axes.titlesize": 8,
+        "axes.labelsize": 8.5,
+        "axes.titlesize": 8.5,
         "legend.fontsize": 7.5,
         "text.color": BLACK,
         "axes.labelcolor": BLACK,
     })
     fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(WIDTH_IN, HEIGHT_IN),
-                                     gridspec_kw={"width_ratios": [0.80, 1.45]})
+                                     gridspec_kw={"width_ratios": [0.70, 1.50]})
     for ax in (ax_a, ax_b):
         style(ax)
 
@@ -175,7 +182,8 @@ def main():
     xs = [0.0] * len(totals)
     for rank, i in enumerate(order):
         xs[i] = 1 + 0.30 * (((rank + 1) * GOLDEN) % 1 - 0.5)
-    ax_a.scatter(xs, totals, s=9, facecolors="none", edgecolors=BLUE, linewidths=0.55, zorder=2)
+    # Grey, not blue: in panel (b) a blue circle means "request to the node" (one meaning per glyph and colour).
+    ax_a.scatter(xs, totals, s=9, facecolors="none", edgecolors=GREY, linewidths=0.55, zorder=2)
     ax_a.bxp([{"q1": stats["q1"], "med": stats["median"], "q3": stats["q3"], "whislo": stats["whiskerLow"],
                "whishi": stats["whiskerHigh"], "fliers": []}],
              positions=[1], widths=0.44, showfliers=False, patch_artist=True, zorder=3,
@@ -188,15 +196,18 @@ def main():
     ax_a.annotate(f"p95 {stats['p95NearestRank']:.2f} ms", xy=(1.13, stats["p95NearestRank"]),
                   xytext=(1.30, stats["p95NearestRank"]), va="center", fontsize=7.5,
                   arrowprops={"arrowstyle": "-", "linewidth": 0.5, "color": BLACK})
+    above = sum(1 for v in totals if v > stats["whiskerHigh"])
+    ax_a.text(1.30, 4.65, f"{above} above whisker", va="center", fontsize=7, color=GREY)
     processes = len({r["process"] for _, r in rows})
     ax_a.set_xticks([1])
-    ax_a.set_xticklabels([rf"\textit{{n}} = {stats['n']}" + "\n" + rf"({processes} processes $\times$ {stats['n'] // processes})"])
+    ax_a.set_xticklabels([rf"\textit{{n}} = {stats['n']}" + "\n"
+                          + rf"{processes} processes $\times$ {stats['n'] // processes} timed calls"])
     ax_a.tick_params(axis="x", length=0)
     ax_a.set_xlim(0.62, 1.95)
     ax_a.set_ylim(0, 5.5)
     ax_a.set_yticks([0, 1, 2, 3, 4, 5])
     ax_a.set_ylabel("End-to-end verification time (ms)")
-    ax_a.yaxis.grid(True, color=GRID, linewidth=0.4)
+    ax_a.yaxis.grid(True, color=GRID, linewidth=0.4, zorder=0)
     ax_a.set_title(r"\textbf{(a)} All 100 verifications", loc="left", pad=4)
 
     # (b) per step
@@ -206,25 +217,26 @@ def main():
         colour = BLUE if node else ORANGE
         st = steps[k]
         ax_b.plot([st["q1"], st["q3"]], [y, y], color=colour, linewidth=1.4, solid_capstyle="butt", zorder=2)
-        ax_b.plot([st["median"]], [y], marker="o" if node else "s", markersize=4.2, color=colour,
+        ax_b.plot([st["median"]], [y], marker="o" if node else "s", markersize=MARKER, color=colour,
                   markeredgecolor=BLACK, markeredgewidth=0.5, linestyle="none", zorder=3)
-        ax_b.text(max(st["q3"], st["median"]) + 0.025, y, f"{st['median']:.3f}", va="center", fontsize=7)
+        ax_b.text(max(st["q3"], st["median"]) + 0.025, y, f"{st['median']:.3f}", va="center", fontsize=7.5)
     ax_b.set_yticks(range(len(STEPS)))
     ax_b.set_yticklabels([label for _, label in reversed(STEPS)])
     ax_b.tick_params(axis="y", length=0)
     ax_b.set_ylim(-0.6, len(STEPS) - 0.4)
-    ax_b.set_xlim(0, 1.2)
+    ax_b.set_xlim(-0.04, 1.2)   # the left spine sits left of 0, so the V1, V4 and V8 markers stay off it
     ax_b.set_xticks([0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2])
     ax_b.set_xlabel("Step time (ms): median and interquartile range")
-    ax_b.xaxis.grid(True, color=GRID, linewidth=0.4)
+    ax_b.xaxis.grid(True, color=GRID, linewidth=0.4, zorder=0)
     ax_b.set_title(r"\textbf{(b)} Per step, same 100 verifications", loc="left", pad=4)
-    handles = [Line2D([0], [0], marker="o", color=BLUE, linewidth=1.4, markersize=4.2, markeredgecolor=BLACK,
+    handles = [Line2D([0], [0], marker="o", color=BLUE, linewidth=1.4, markersize=MARKER, markeredgecolor=BLACK,
                       markeredgewidth=0.5, label="request to the node"),
-               Line2D([0], [0], marker="s", color=ORANGE, linewidth=1.4, markersize=4.2, markeredgecolor=BLACK,
+               Line2D([0], [0], marker="s", color=ORANGE, linewidth=1.4, markersize=MARKER, markeredgecolor=BLACK,
                       markeredgewidth=0.5, label="computed in the verifier")]
-    ax_b.legend(handles=handles, loc="upper right", frameon=False, handlelength=1.8, borderaxespad=0.2)
+    ax_b.legend(handles=handles, loc="upper right", frameon=True, facecolor="white", edgecolor="none",
+                framealpha=1, fancybox=False, borderpad=0.3, handlelength=1.8, borderaxespad=0.2)
 
-    fig.tight_layout(pad=0.3, w_pad=1.2)
+    fig.tight_layout(pad=0.3, w_pad=1.4)
     out.mkdir(parents=True, exist_ok=True)
     fig.savefig(out / "Figure_3.pdf", metadata={"CreationDate": None, "ModDate": None, "Producer": None,
                                                  "Creator": None})

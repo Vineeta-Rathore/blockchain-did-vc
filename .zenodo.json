@@ -1,21 +1,22 @@
 {
   "title": "Decentralised Identifier-Anchored Verifiable Credentials with On-Chain Revocation for Social Media Identity Management",
-  "description": "Reference implementation of an Ethereum registry of DID documents with per-credential revocation keyed by the issuer DID (Solidity), a Node.js service that issues W3C Verifiable Credentials with eddsa-jcs-2022 proofs (Ed25519, Multikey), a verifier that checks a credential against the registry with all reads pinned to one block, and the scripts, logs and tools behind the paper's measurements. Version 1.1.0: a pause no longer blocks revocation or deactivation; revocations carry an RFC 5280 reason code; administrator actions emit events; a controller handover needs the new address's acceptance; the registry stores no copies, which lowers the gas of revocation and DID creation; validFrom is checked; proofs follow eddsa-jcs-2022 section 3.3 and reproduce the W3C test vector; gas is reported for the osaka schedule and for the schedule Sepolia has used since 6 October 2026; 164 tests. The measurement code was frozen at commit 73b4cca16e7c before the Sepolia run of 12 November 2026. Added after the run, without changing that code: the timed local log of 9 November 2026; the closed Sepolia log of 12 November 2026; the v1.1.0 deployment record (contract 0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2 on Sepolia); the output of the unchanged earlier test and the log of the revised harness on the earlier code; the run-day rules (the pre-registration addendum and the run tools) with the manifest lines of the published files; the run checker and its tests; the final verdict and the analysis output; a sanitised summary of the network monitor; the figure scripts; and the transcript of the test run at the archived commit. The raw monitor and wrapper logs remain with the authors.",
+  "description": "<p>Reference implementation for the paper \"Decentralised Identifier-Anchored Verifiable Credentials with On-Chain Revocation for Social Media Identity Management\".</p>\n<p><strong>It contains:</strong><br>- an Ethereum registry of DID documents with per-credential revocation keyed by the issuer DID (Solidity);<br>- a Node.js service that issues W3C Verifiable Credentials with eddsa-jcs-2022 proofs (Ed25519, Multikey);<br>- a verifier that checks a credential against the registry, with all reads pinned to one block;<br>- the scripts, logs and tools behind the paper's measurements.</p>\n<p><strong>Changes in version 1.1.1:</strong><br>- the full manifest of the run-day rule files (run_day/RUN_DAY_MANIFEST.sha256, SHA-256 8a2ff62b04a01042e8a523a240eda58d3eb183841b46d8eb1c40803a9d22e04f) is published, so its hash can be recomputed and 21 of its 23 entries checked against published files;<br>- the figure sources were redesigned and the figure build script checks its tools;<br>- FROZEN_CODE.sha256 gives the SHA-256 of the nine measurement files at the freeze commit 73b4cca16e7c;<br>- the README maps each table and figure of the paper to a command, an output and a runtime, lists the files that must not change, and states further limits, the dependency audit and the licence;<br>- citation metadata for version 1.1.1.<br>The contract, the code, the tests (164) and the published logs are those of version 1.1.0.</p>\n<p><strong>Data and run records:</strong><br>The measurement code was frozen at commit 73b4cca16e7c before the Sepolia run of 12 November 2026. Added after the run, without changing that code:<br>- the timed local log of 9 November 2026;<br>- the closed Sepolia log of 12 November 2026;<br>- the v1.1.0 deployment record (contract 0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2 on Sepolia);<br>- the output of the unchanged earlier test and the log of the revised harness on the earlier code;<br>- the run-day rules (the pre-registration addendum and the run tools) with the manifest lines of the published files and the full manifest;<br>- the run checker and its tests, the final verdict and the analysis output;<br>- a sanitised summary of the network monitor;<br>- the figure scripts;<br>- the transcript of the test run at the archived commit.</p>\n<p>The raw monitor and wrapper logs remain with the authors. README.md explains how to reproduce the paper's numbers and figures.</p>\n<p>Version 1.1.0 (DOI 10.5281/zenodo.24263442) has the same contract, code, tests and logs. Version 1.0.0 (DOI 10.5281/zenodo.21515958) is superseded.</p>",
   "upload_type": "software",
   "access_right": "open",
-  "license": "MIT",
-  "version": "1.1.0",
-  "publication_date": "2026-11-16",
+  "license": "mit-license",
+  "version": "1.1.1",
+  "doi": "10.5281/zenodo.24451811",
+  "publication_date": "2026-11-23",
   "creators": [
     {
       "name": "Rathore, Vineeta",
-      "orcid": "0009-0007-7531-9445",
-      "affiliation": "Department of Computer Science and Engineering, Medicaps University, Indore, India"
+      "affiliation": "Medicaps University",
+      "orcid": "0009-0007-7531-9445"
     },
     {
       "name": "Rawat, Manoj Kumar",
-      "orcid": "0000-0003-4158-9782",
-      "affiliation": "Department of Computer Science and Engineering, Medicaps University, Indore, India"
+      "affiliation": "Medicaps University",
+      "orcid": "0000-0003-4158-9782"
     }
   ],
   "keywords": [
@@ -30,10 +31,16 @@
   ],
   "related_identifiers": [
     {
-      "identifier": "10.5281/zenodo.21515958",
+      "identifier": "10.5281/zenodo.24263442",
       "relation": "isNewVersionOf",
-      "scheme": "doi",
-      "resource_type": "software"
+      "resource_type": "software",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "https://github.com/Vineeta-Rathore/blockchain-did-vc/tree/v1.1.1",
+      "relation": "isSupplementTo",
+      "resource_type": "software",
+      "scheme": "url"
     }
   ]
 }

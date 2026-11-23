@@ -1,13 +1,62 @@
 # Changelog
 
+## 1.1.1 (2026-11-23)
+
+Archived release: DOI 10.5281/zenodo.24451811, a new version of the version 1.1.0 record (DOI 10.5281/zenodo.24263442).
+The contract (`0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2` on Sepolia), the code, the 164 tests and the published logs
+are those of version 1.1.0. The measurement code was frozen at commit `73b4cca16e7c`, which is in the history of
+`main`, before the Sepolia run of 12 November 2026; the header of the run log names that commit. `package.json` and
+`package-lock.json` belong to that frozen code, so their version field still reads 1.1.0.
+
+### Figures
+
+- Figures 1 to 3 and the graphical abstract were redesigned: new `figures/gen_fig_1.tex`, `gen_fig_2.tex`,
+  `gen_fig_3.py` and `gen_graphical_abstract.tex`. The graphical abstract is now landscape (160 mm x 112 mm) and is
+  also written as a 600 dpi TIFF. Figure 3 plots the same log with the same statistics: `Figure_3_stats.json` is
+  unchanged.
+- `figures/build_all.sh` checks that pdflatex, pdftoppm, pdfinfo, pdffonts and the Python packages are present before
+  it builds, uses `sha256sum` or else `shasum -a 256`, and writes the TIFF of the graphical abstract (Pillow).
+- The figure hash table in `README.md` gives the outputs of the new build (two builds on 22 November 2026 gave
+  identical files).
+
+### Run-day files
+
+- `run_day/RUN_DAY_MANIFEST.sha256` is new: the full manifest of the run-day rule files, copied byte for byte (SHA-256
+  8a2ff62b04a01042e8a523a240eda58d3eb183841b46d8eb1c40803a9d22e04f, the value e-mailed before the run). Its hash can
+  now be recomputed, and 21 of its 23 lines checked against published files; the other two name internal planning
+  files that are not published.
+- `run_day/MANIFEST_SUBSET.sha256`: only the comment header changed (the full manifest is published; git writes the
+  contract with CRLF line endings). Its manifest lines and every other run-day file are unchanged.
+
+### Documentation and metadata
+
+- New `FROZEN_CODE.sha256`: the SHA-256 of the nine measurement files that the run-day manifest does not cover, each
+  equal to the file at commit `73b4cca16e7c`.
+- `README.md`: one section "Reproducing the paper" that maps each table and figure of the paper to a command, the
+  output to compare and its runtime, with the outputs of re-runs written to `out/`, never to `results/`; an
+  environment-variable table; the Python (3.11 or 3.12) and Node.js (22.10.0 tested) requirements; which steps need
+  network access; the line endings of the contract; a section "Maintaining this repository" with the files that must
+  not change and how the code depends on itself; the note on the status line and the AI tools named in the run-day
+  files; the meaning of the names `r2.1` and `R1code`; further limits (verifier input, block-number reply, dates,
+  `rotateKey` input, repeated events, the unused nonces, untested paths, handover and signing keys, the scale of the
+  statistics code, throughput, the Sepolia schedule's time zone, http URLs, the deployer key, the dependency audit of
+  22 November 2026); corrected wording on key-file modes on Windows and on the git guard; the result object of the
+  verifier; the licence of data and documentation and the attribution of the W3C test vector; citation of version
+  1.1.1 and the concept DOI.
+- `CITATION.cff` and `.zenodo.json` describe version 1.1.1; `.zenodo.json` follows the Zenodo record of version
+  1.1.0, which is authoritative for the metadata. The two stale comments in `CITATION.cff` were removed.
+- `.gitignore` ignores `out/`.
+- Corrected: the 1.1.0 entry below said that a branch `frozen-v1.1.0` points at the freeze commit; no such branch was
+  published. The freeze commit itself is public, in the history of `main`.
+
 ## 1.1.0 (16 November 2026)
 
 Archived release: DOI 10.5281/zenodo.24263442, a new version of the version 1.0.0 record.
 
 ### Frozen code, then results
 
-- The measurement code was frozen at commit `73b4cca16e7c` before the Sepolia run of 12 November 2026. The branch
-  `frozen-v1.1.0` points at that commit, and the header of the run log names it.
+- The measurement code was frozen at commit `73b4cca16e7c` (in the history of `main`) before the Sepolia run of 12
+  November 2026; the header of the run log names that commit.
 - After the run, these were added without changing that code: the logs and the deployment record (`results/`), the
   verdict, checker report, analysis output and monitor summary of the run (`results/run_2026-11-12/`), the earlier test
   and the revised harness on the version 1.0.0 code (`results/r2.1_local_comparison/`), the run rules and tools with

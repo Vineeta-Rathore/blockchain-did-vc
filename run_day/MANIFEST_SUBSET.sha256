@@ -6,8 +6,8 @@
 # mailbox before the run (received 07:18:25 IST, 12 November 2026; see the Data Availability Statement of the paper).
 #
 # The manifest also lists two internal planning files (R2_REVISION_PLAN.md and R2_SOP.md) that are not published.
-# So a reader can check each published file against its manifest line below, but cannot recompute the manifest hash
-# from this repository.
+# Since version 1.1.1 the full manifest is published unchanged as run_day/RUN_DAY_MANIFEST.sha256, so its hash can be
+# recomputed from this repository, and 21 of its 23 entries (those below) can be checked against published files.
 #
 # Each entry is the manifest line unchanged (SHA-256, size, path in the authors' folder), then "=>" and the path of the
 # same file in this repository. Every published file was copied byte for byte and its SHA-256 checked after copying.
@@ -17,8 +17,9 @@
 # conversion (see .gitattributes), so their bytes are the same on every system. contracts/DIDRegistry.sol and the
 # scripts were committed at 73b4cca with LF line endings. The manifest hashed the authors' Windows checkout, in which
 # git wrote contracts/DIDRegistry.sol with CRLF line endings: its line matches after converting LF to CRLF. The five
-# scripts have LF endings in that checkout too, so their lines match as committed. The release zip and a checkout
-# without line-ending conversion hold the contract with LF endings. To check it against its line:
+# scripts have LF endings in that checkout too, so their lines match as committed. Since version 1.1.0, .gitattributes
+# makes git write the contract with CRLF endings in every checkout and in the release zip, so there its line matches as
+# stored; a copy with LF endings (for example the raw file shown by GitHub) matches after conversion. To check either:
 #   python3 -c "import hashlib; b = open('contracts/DIDRegistry.sol', 'rb').read().replace(b'\r\n', b'\n'); print(hashlib.sha256(b.replace(b'\n', b'\r\n')).hexdigest())"
 #
 2a4e07578c99c015bf6618a5c76b8149aadeebd8835b0fc632d9d6aef35060a3     24883  artifact_v1.1/contracts/DIDRegistry.sol  =>  contracts/DIDRegistry.sol

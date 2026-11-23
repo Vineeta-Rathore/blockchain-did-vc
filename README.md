@@ -6,10 +6,12 @@ Verifiable Credentials with `eddsa-jcs-2022` proofs, a verifier that checks a cr
 scripts and raw logs behind the paper's measurements. It covers the DID and credential layers only; it does not
 implement verifiable presentations, holder binding or zero-knowledge selective disclosure.
 
-This is version 1.1.0 (DOI [10.5281/zenodo.24263442](https://doi.org/10.5281/zenodo.24263442)). What changed since
+This is version 1.1.1 (DOI [10.5281/zenodo.24451811](https://doi.org/10.5281/zenodo.24451811)). What changed since
 version 1.0.0 is listed in [`CHANGELOG.md`](CHANGELOG.md). The measurement code was frozen at commit `73b4cca16e7c`
 before the Sepolia run of 12 November 2026; the logs, the run tools and the figure builders were added after the run,
-without changing that code.
+without changing that code. Version 1.1.1 changes only documentation, metadata, the figure sources and their build
+script, and adds the full run-day manifest and `FROZEN_CODE.sha256`: the contract, the code, the tests and the
+published logs are those of version 1.1.0 (DOI 10.5281/zenodo.24263442).
 
 ## Contents
 
@@ -20,12 +22,13 @@ without changing that code.
 - [The registry](#the-registry)
 - [Issuing and verifying credentials](#issuing-and-verifying-credentials)
 - [Gas on two schedules](#gas-on-two-schedules)
-- [Reproducing the numbers](#reproducing-the-numbers)
-- [Reproducing the paper's numbers and figures](#reproducing-the-papers-numbers-and-figures)
+- [Reproducing the paper](#reproducing-the-paper)
 - [Sepolia scripts and secrets](#sepolia-scripts-and-secrets)
+- [Maintaining this repository](#maintaining-this-repository)
 - [Limits](#limits)
 - [Standards](#standards)
 - [Citing](#citing)
+- [Contact](#contact)
 - [Licence](#licence)
 
 ## Versions and contracts
@@ -35,7 +38,7 @@ own version.
 
 | Version | Contract on Ethereum Sepolia (chain ID 11155111) | Revocation interface | Measurements |
 |---|---|---|---|
-| 1.1.0 | `0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2`, created 9 November 2026 (block 12,099,140) | `revokeCredential(string,string,uint8)`; event `CredentialRevoked(string indexed didId, string indexed credentialId, uint8 reasonCode, uint256 timestamp)` | `results/sepolia_v1.1_deployment.json`, the logs named in [`results/README.md`](results/README.md) |
+| 1.1.0 and 1.1.1 (same contract) | `0x625eD772F70199BAc1A33A3BAF49B7394bBb5FC2`, created 9 November 2026 (block 12,099,140) | `revokeCredential(string,string,uint8)`; event `CredentialRevoked(string indexed didId, string indexed credentialId, uint8 reasonCode, uint256 timestamp)` | `results/sepolia_v1.1_deployment.json`, the logs named in [`results/README.md`](results/README.md) |
 | 1.0.0 (superseded) | `0x5f9017208f3F4A97657E2b32BE433a2641DFEF07`, created 21 July 2026 | `revokeCredential(string,string,string)`; event `CredentialRevoked(string indexed didId, string indexed credentialId, string reason, uint256 timestamp)` | `results/sepolia_2026-07-21_n20.jsonl` |
 
 The ABI of version 1.1.0 is in `artifacts/contracts/DIDRegistry.sol/DIDRegistry.json` after `npx hardhat compile`.
@@ -43,18 +46,26 @@ The ABI of version 1.0.0 comes from `contracts/DIDRegistry.sol` at commit `4b051
 Sepolia was compiled with solc 0.8.24, not with the 0.8.19 set in this repository, so a compile from this repository
 does not reproduce its bytecode; its interface is the version 1.0.0 ABI ([`results/README.md`](results/README.md)).
 
+Two names in `results/` are internal labels kept because the hash tables and the version 1.1.0 archive use these
+paths: `r2.1` in `results/r2.1_local_comparison/` is the reviewer comment R2.1 that asked for that comparison, and
+`R1code` in its file names means the version 1.0.0 code.
+
 ## Requirements
 
-- Node.js 20 or later (Hardhat's simulator, EDR, needs it; `engines` in `package.json`) and npm. Tested with Node.js 22.10.0 and npm 10.9.0 on
-  Windows 11.
-- Python 3 with numpy, only for `scripts/check_stats_numpy.py`, and with matplotlib, only for
-  `scripts/plot-latency.py`: `python3 -m pip install -r requirements.txt` (numpy 1.26.2, matplotlib 3.10.5; tested
-  with Python 3.12.2). On Windows the command is `python` or `py -3`; the commands below write `python3`.
+- Node.js and npm. Tested only with Node.js 22.10.0 and npm 10.9.0 on Windows 11; Linux and macOS have not been
+  tested. `engines` in `package.json` asks for Node.js 20 or later (Hardhat's simulator, EDR, needs it), but no other
+  version was tested. The lock file pins a legacy toolchain (Hardhat 2.29.0, ethers 5.8.0) on purpose: it was frozen
+  for the measurements and is not updated.
+- Python 3.11 or 3.12 (tested with 3.12.2), with numpy only for `scripts/check_stats_numpy.py` and with matplotlib only
+  for `scripts/plot-latency.py`: `python3 -m pip install -r requirements.txt` (numpy 1.26.2, matplotlib 3.10.5). The
+  pinned numpy 1.26.2 has no wheel for Python 3.13 or later. On Windows the command is `python` or `py -3`; the
+  commands below write `python3`.
 - For the Sepolia scripts only: an Ethereum Sepolia JSON-RPC endpoint; for `deploy-sepolia.js` also a funded Sepolia
   test key (never a key that holds real funds). The run checker and the analysis of the published logs need no
   endpoint and send no request.
-- For the figures only: pdflatex, pdfinfo, pdffonts and pdftoppm (tested with TeX Live 2024) and the Python packages
-  in `figures/requirements.txt`; on Windows, `bash` from Git for Windows.
+- For the figures only: pdflatex, pdfinfo, pdffonts and pdftoppm (tested with TeX Live 2024; LaTeX packages
+  standalone, tikz and pgf, microtype, textcomp and the psnfss fonts), `sha256sum` or `shasum`, and the Python
+  packages in `figures/requirements.txt`; on Windows, `bash` from Git for Windows.
 
 ## Quick start
 
@@ -89,7 +100,11 @@ test/
   DIDRegistry.test.js          registry behaviour, pause scope, reason codes, admin events, repair while deactivated
   VerifiableCredential.test.js credential flow, validity period, same-block reads, eddsa-jcs-2022 test vector
   leak.test.js                 no RPC URL or token in any output when the endpoint fails; no retries
-  GasSchedule.test.js          the Sepolia gas model against values observed on Sepolia
+  rpc.test.js                  what the Sepolia scripts treat as a secret (fake URLs only)
+  harness.test.js              connection reuse, the mode order of each block, interval estimates, argument errors
+  deploy.test.js               deploy-sepolia.js against a local Hardhat node: fresh, completed, refused, interrupted
+  analyze.test.js              the latency analysis counts only successful measurements
+  GasSchedule.test.js          the Sepolia gas model against values observed on Sepolia, and the gas tables of the docs
   fixtures/eddsa-jcs-2022-B3.json   W3C test vector (the specification's published test key)
 scripts/
   measure-gas.js               gas of deploy, createDID and revokeCredential (Hardhat network)
@@ -100,17 +115,26 @@ scripts/
   check_stats_numpy.py         cross-check of the statistics against numpy
   plot-latency.py              the latency figure from the local log
   deploy.js                    deployment to a local `npx hardhat node`
-  lib/                         statistics, fixtures, gas model, RPC helpers, measurement modes
+  lib/                         statistics, fixtures, gas model, RPC helpers, measurement modes, argument parsing
 results/
   README.md                    what each log measured, with which script, contract and version
   *.jsonl, *.json              raw logs and the deployment record
   run_2026-11-12/              verdict, checker report and analysis of the Sepolia run; monitor summary and its script
   r2.1_local_comparison/       the earlier test and the revised harness, both run on the version 1.0.0 code
-run_day/                       the rules and tools of the Sepolia run, as fixed before it (byte for byte)
-  MANIFEST_SUBSET.sha256       the manifest lines of the published run-day files
-  tests/                       tests of the run checker and of the run tools
+run_day/                       the rules and tools of the Sepolia run, as fixed before it (byte for byte; only the comment header of `MANIFEST_SUBSET.sha256` was written later)
+  RUN_DAY.md                   the run-day procedure
+  RUN_DAY_ADDENDUM_DRAFT.md    the pre-registration addendum (the run-day rules)
+  RUN_DAY_MANIFEST.sha256      the full manifest of the rule files, whose SHA-256 was e-mailed before the run
+  MANIFEST_SUBSET.sha256       the manifest lines of the published run-day files, mapped to their paths here
+  check_sepolia_run.js         the run checker
+  analysis_primary.js          the analysis of the closed log
+  preflight_chain.js           the chain check before the run
+  *.ps1                        the Windows PowerShell wrapper, preflight and status tools (Windows only)
+  tests/                       tests of the run checker and of the run tools, and the mutation run
 figures/                       builders of Figures 1 to 3 and of the graphical abstract (output in figures/out/)
 test-transcripts/              the npm test run at the archived commit 73b4cca
+FROZEN_CODE.sha256             SHA-256 of the nine measurement files at the freeze commit 73b4cca16e7c
+out/                           not in the repository: the folder the commands below write to (git ignores it)
 ```
 
 ## The registry
@@ -168,8 +192,8 @@ rotation or an update changes both.
 
 `src/vc/vc-service.js` issues credentials in the W3C Verifiable Credentials Data Model 2.0 with an `eddsa-jcs-2022`
 Data Integrity proof (Ed25519 keys in Multikey encoding). Following section 3.3.1 of the cryptosuite specification,
-the credential's `@context` is copied into the proof before the proof configuration is hashed; the W3C test vector
-(appendix B.3): a test reproduces its proof value. Credentials signed by version 1.0.0, whose proofs have no
+the credential's `@context` is copied into the proof before the proof configuration is hashed; a test reproduces the
+proof value of the W3C test vector (appendix B.3). Credentials signed by version 1.0.0, whose proofs have no
 `@context`, still verify.
 
 `src/vc/verifier-service.js` checks a credential in the order below and stops at the first failure:
@@ -202,8 +226,12 @@ const verifier = new CredentialVerifierService(registryContract, {
   blockLag: 0,             // pin the reads this many blocks below the newest
 });
 const result = await verifier.verifyCredential(credential);            // or { blockTag: n } as a second argument
-// { valid, reason, issuerDid, subjectDid, credentialId, checkedAt, checkedAtBlock, timings? }
+// { valid, reason, checkedAt, checkedAtBlock, issuerDid, subjectDid, credentialId, timings? }, see below
 ```
+
+The method returns a result object with `valid`, `reason`, `checkedAt` and, except for `VERIFICATION_ERROR`,
+`issuerDid`, `subjectDid` and `credentialId`; `checkedAtBlock` is `null` when a structure check fails before step B0,
+and a `VERIFICATION_ERROR` result carries `errorCode` instead of the three identifiers.
 
 ## Gas on two schedules
 
@@ -234,26 +262,61 @@ were in Last Call at that date and may still change before they reach mainnet. T
 of 9 November 2026 is in `results/sepolia_v1.1_deployment.json`: 21,692,728, 3,009,361, 2,139,071 and 138,811 for the
 four transactions, the values of the Glamsterdam column.
 
-## Reproducing the numbers
+## Reproducing the paper
 
-| Number | Command | Source |
+After `npm ci` and one `npx hardhat compile` (both need network access; the compile downloads solc 0.8.19 once), every
+command below works offline. The figure build needs only its pinned Python packages and TeX Live. The commands are
+written for `bash` and run from the repository root; in PowerShell, write `(Get-Location).Path` for `"$(pwd)"`. The
+run-day scripts need `--root` as an absolute path. Every command below that writes an output file writes it to `out/`
+(the compiler and the tests write only the git-ignored `artifacts/` and `cache/`), never to `results/`, whose logs
+are published byte for byte; create `out/` with `mkdir -p out` (git ignores it).
+
+Each table and figure of the paper, the command that reproduces it, the output to compare, and the time the command
+took on the authors' laptop (Table 2) on 22 November 2026:
+
+| Paper item | Command | Output to compare | Time |
+|---|---|---|---|
+| Table 1 (related work) | none | not produced by this repository: its cells cite pinned commits and pages in the paper's references | - |
+| Table 2 (configuration) | `node --version`; `npx hardhat --version`; `npx hardhat compile` | Node.js 22.10.0 and Hardhat 2.29.0; solc 0.8.19, optimiser on, 200 runs, hard fork osaka in `hardhat.config.js`; ethers 5.8.0 in `package-lock.json`; the header rows of `results/local_2026-11-09_n100.jsonl` record the laptop | 10 s |
+| Table 3 (gas) | `npm run measure-gas`, then `GAS_INPUTS=results/sepolia_v1.1_deployment.json npx hardhat run scripts/measure-gas.js` | JSON on the console with the values of the table in "Gas on two schedules"; the Sepolia receipts are the `gasUsed` fields of `results/sepolia_v1.1_deployment.json` | 10 s each |
+| Table 4 (local latency) | `node scripts/analyze-latency.js results/local_2026-11-09_n100.jsonl` | console: n = 100, median 2.77 ms, mean 2.92 ms, p95 3.82 ms, maximum 5.03 ms; process medians 3.25, 2.73, 2.69, 2.73 and 2.76 ms | 1 s |
+| Earlier test (text of the local evaluation) | `node scripts/analyze-latency.js results/r2.1_local_comparison/R1code_local_2026-11-09_n100.jsonl`; the earlier test's own output is `results/r2.1_local_comparison/R1code_runA_2026-11-09_output.txt` | median 2.72 ms; the output file holds "mean=56.353ms" | 1 s |
+| July 2026 run (version 1.0.0) | `node scripts/analyze-latency.js results/sepolia_2026-07-21_n20.jsonl` | sequential median 646.8 ms (n = 20) | 1 s |
+| Table 5 (Sepolia) | `node run_day/analysis_primary.js --root "$(pwd)" --log results/sepolia_2026-11-12_n100.jsonl --verdict results/run_2026-11-12/verdict_final.json --out out/analysis_summary.json > out/analysis_primary_output.txt`, then `cmp out/analysis_primary_output.txt results/run_2026-11-12/analysis_primary_output.txt` and `cmp out/analysis_summary.json results/run_2026-11-12/analysis_summary.json` | both `cmp` commands print nothing | 5 s |
+| Table 6 (tests) | `npm test` | "164 passing"; per suite 65, 51, 14, 13, 8, 6, 4 and 3, as in `test-transcripts/npm_test_73b4cca_2026-11-15.txt`, the run at the archived commit | 1.5 min |
+| Figures 1 to 3 and the graphical abstract | `bash figures/build_all.sh out/figures` | `out/figures/SHA256SUMS.txt` against the hash table under "Figures" below | 15 s |
+| Statistics against numpy | `python3 scripts/check_stats_numpy.py` | "0 mismatches" | 1 s |
+| Run-day consistency checks | `node run_day/tests/test_consistency.js "$(pwd)"` | "55 consistency checks, 0 wrong" | 2 s |
+
+New measurements are optional and write new logs, so their values differ from the paper's (machine, day, provider):
+
+| New measurement | Command | Output | Time |
+|---|---|---|---|
+| Local latency (Table 4) | `for k in 1 2 3 4 5; do LOCAL_LOG=out/local_rerun.jsonl PROCESS_INDEX=$k npx hardhat run scripts/measure-local.js; done`, then `node scripts/analyze-latency.js out/local_rerun.jsonl` | `out/local_rerun.jsonl` (five header rows and 600 measurement rows, 100 of them timed) and its analysis | 7 s per process |
+| Sepolia latency (Table 5) | `node scripts/measure-sepolia.js --deployment results/sepolia_v1.1_deployment.json --log out/sepolia_rerun.jsonl --env <your env file>`, then `node scripts/analyze-latency.js out/sepolia_rerun.jsonl` | `out/sepolia_rerun.jsonl` and its analysis | one day: ten blocks from 08:00 to 20:00 machine local time |
+| Latency figure, quick plot | `python3 scripts/plot-latency.py results/local_2026-11-09_n100.jsonl --out out/latency_quick.pdf --expect-n 100` | a plot of the local log (not the submitted Figure 3) | 3 s |
+
+Never point `LOCAL_LOG` or `--log` at a file in `results/`: the scripts append to it. In PowerShell the loop is
+`foreach ($k in 1..5) { $env:LOCAL_LOG = "out/local_rerun.jsonl"; $env:PROCESS_INDEX = "$k"; npx hardhat run scripts/measure-local.js }`.
+Variables set this way stay set for the whole PowerShell session: remove them afterwards
+(`Remove-Item Env:LOCAL_LOG, Env:PROCESS_INDEX, Env:GAS_INPUTS`), because a leftover `GAS_INPUTS` switches
+`npm run measure-gas` to replay mode and a leftover `PROCESS_INDEX` repeats a process index (which
+`analyze-latency.js` reports).
+
+Environment variables:
+
+| Variable | Read by | Meaning |
 |---|---|---|
-| Test count | `npm test` | console |
-| Gas, both schedules | `npm run measure-gas` | console (JSON) |
-| Gas for the deployment's own inputs | `GAS_INPUTS=results/sepolia_v1.1_deployment.json npx hardhat run scripts/measure-gas.js` | console (JSON) |
-| Local verification latency | five runs of `LOCAL_LOG=results/local_<date>_n100.jsonl PROCESS_INDEX=<k> npx hardhat run scripts/measure-local.js`, k = 1 to 5, then `node scripts/analyze-latency.js <log>` | `results/local_2026-11-09_n100.jsonl` |
-| Sepolia verification latency | `node scripts/measure-sepolia.js --deployment results/sepolia_v1.1_deployment.json --log <log> --env <file>`, then `node scripts/analyze-latency.js <log>` | `results/sepolia_2026-11-12_n100.jsonl` |
-| Sepolia analysis of the paper | `node run_day/analysis_primary.js ...` (see the next section) | `results/run_2026-11-12/analysis_primary_output.txt` |
-| Latency figure, quick plot | `python3 scripts/plot-latency.py results/local_2026-11-09_n100.jsonl --out <file.pdf> --expect-n 100` | the file given with `--out` |
-| Figures of the paper | `bash figures/build_all.sh` (see the next section) | `figures/out/` |
-| July 2026 figures (version 1.0.0) | `node scripts/analyze-latency.js results/sepolia_2026-07-21_n20.jsonl` | `results/sepolia_2026-07-21_n20.jsonl` |
-| Statistics against numpy | `python3 scripts/check_stats_numpy.py` | console |
+| `SEPOLIA_RPC_URL` | `measure-sepolia.js`, `deploy-sepolia.js` (or the one line of the `--env` file) | the Sepolia JSON-RPC URL; a set variable takes precedence over the `--env` file |
+| `LOCAL_LOG` | `measure-local.js` | the log file the rows are appended to |
+| `PROCESS_INDEX` | `measure-local.js` | the number of this process (1 to 5) |
+| `GAS_INPUTS` | `measure-gas.js` | a deployment record whose inputs are replayed |
+| `TEX` | `figures/build_all.sh` | the folder of the TeX binaries, if they are not on PATH |
+| `PY` | `figures/build_all.sh` | the Python command (default `python3`, else `python`) |
 
-On Windows PowerShell, set the variables first: `$env:LOCAL_LOG = "results/local_<date>_n100.jsonl";
-$env:PROCESS_INDEX = "1"; npx hardhat run scripts/measure-local.js`. Variables set this way stay set for the whole
-PowerShell session: remove them afterwards (`Remove-Item Env:LOCAL_LOG, Env:PROCESS_INDEX, Env:GAS_INPUTS`), because
-a leftover `GAS_INPUTS` switches `npm run measure-gas` to replay mode and a leftover `PROCESS_INDEX` repeats a
-process index (which `analyze-latency.js` reports).
+If something fails: `npx hardhat` outside the repository downloads another Hardhat; PowerShell sets variables with
+`$env:NAME = "value"`, not `NAME=value`; on Windows `python3` may be a Microsoft Store stub (use `python` or `py -3`);
+the first compile needs network access.
 
 `analyze-latency.js` counts only measurements that succeeded (a valid verification, or reads with a time, no error
 and the expected answers) and leaves out pilot rows; it reports the rows it left out, by mode and error code, rows
@@ -272,33 +335,28 @@ rule, the nearest-rank 95th percentile, an order-statistic confidence interval f
 process or block medians), and a seeded percentile bootstrap for paired speed-ups. Each log, and what produced it, is described in
 [`results/README.md`](results/README.md).
 
-## Reproducing the paper's numbers and figures
-
-Every command runs from the repository root and works offline. The commands are written for `bash`; in PowerShell,
-write `(Get-Location).Path` for `"$(pwd)"`. The run-day scripts need `--root` as an absolute path.
-
 Tests. `npm test` runs the 164 tests; `test-transcripts/npm_test_73b4cca_2026-11-15.txt` is the run at the archived
-commit (164 passing, exit 0). The run checker and the run tools have their own tests:
+commit (164 passing, exit 0). The run checker and the run tools have their own tests, which `npm test` does not run:
 
 ```bash
 node run_day/tests/test_consistency.js "$(pwd)"
 node run_day/tests/test_check_sepolia_run.js "$(pwd)" "$(pwd)/results/sepolia_v1.1_deployment.json"
 ```
 
-The first gives 55 checks and the second 301 scenarios (about three minutes); both make their own fake inputs. One
-consistency check compares `contracts/DIDRegistry.sol` with the hash of the authors' Windows checkout, which has CRLF
-line endings. The release zip and checkouts without line-ending conversion have LF line endings, so there that one
-check fails; `run_day/MANIFEST_SUBSET.sha256` shows how to check the contract against its manifest line.
+The first gives 55 checks and the second 301 scenarios (about three minutes); both make their own fake inputs.
+`run_day/tests/mutation.js` is the mutation run of the run checker (usage in its header); its runtime was not timed
+for this README. One of the 55 consistency checks compares `contracts/DIDRegistry.sol` with its manifest hash.
+`contracts/DIDRegistry.sol` is checked out with CRLF line endings (`eol=crlf` in `.gitattributes`; the git object and
+the raw file on GitHub hold LF): these are the bytes that were compiled and deployed (24,883 bytes, SHA-256
+2a4e07578c99...). The compiler's metadata hash covers the source bytes,
+so the same file with LF endings compiles to the same code except for the 32-byte metadata hash (runtime keccak
+0x7c2e3be6...32f7 instead of 0x355a986a...0679), and the contract line of the manifest then does not match.
+`run_day/MANIFEST_SUBSET.sha256` shows how to check the contract against its manifest line.
 
-Analysis of the Sepolia run. This reads the closed log and the final verdict and writes the tables of the paper:
-
-```bash
-node run_day/analysis_primary.js --root "$(pwd)" --log results/sepolia_2026-11-12_n100.jsonl \
-  --verdict results/run_2026-11-12/verdict_final.json --out analysis_summary.json > analysis_primary_output.txt
-```
-
-Both outputs equal `results/run_2026-11-12/analysis_primary_output.txt` and `analysis_summary.json` byte for byte
-(checked on 16 November 2026 with Node.js 22.10.0 on Windows 11).
+Analysis of the Sepolia run. `run_day/analysis_primary.js` (the Table 5 row above) reads the closed log and the final
+verdict and writes the tables of the paper. Both outputs equal `results/run_2026-11-12/analysis_primary_output.txt`
+and `analysis_summary.json` byte for byte (checked on 16 November 2026 and again on 22 November 2026 with Node.js
+22.10.0 on Windows 11).
 
 The run checker. `run_day/check_sepolia_run.js` wrote `results/run_2026-11-12/verdict_final.json` and
 `check_final.txt` from the log, the deployment record and the raw monitor file. The raw monitor file is not published,
@@ -308,49 +366,57 @@ check the provider host and to scan the log for parts of the RPC URL; it sends n
 is enough, and no real URL or key is needed:
 
 ```bash
-printf 'SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com\n' > .env.provider-host
-node run_day/check_sepolia_run.js --root "$(pwd)" --env .env.provider-host \
+mkdir -p out
+printf 'SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com\n' > out/provider-host.txt
+node run_day/check_sepolia_run.js --root "$(pwd)" --env out/provider-host.txt \
   --deployment results/sepolia_v1.1_deployment.json --log results/sepolia_2026-11-12_n100.jsonl \
-  --monitor <run_monitor.jsonl> --blocks-json verdict.json
+  --monitor <run_monitor.jsonl> --blocks-json out/verdict.json
 ```
 
 With the raw monitor file, this command gave on 16 November 2026 the report of `check_final.txt` line for line (that
 file was saved from PowerShell, with a byte order mark and CRLF line endings) and the verdict of `verdict_final.json`
 except its `evaluated_at` time. The monitor summary in `results/run_2026-11-12/` was made from the same raw file with
 `python3 results/run_2026-11-12/make_monitor_summary.py <run_monitor.jsonl> results/sepolia_2026-11-12_n100.jsonl
---out monitor_summary.json --md monitor_summary.md`.
+--out out/monitor_summary.json --md out/monitor_summary.md`.
 
-Figures. `figures/build_all.sh` builds Figures 1 to 3 and the graphical abstract into `figures/out/` (or a folder
-given as its argument). It reads only the four sources in `figures/` and, for Figure 3,
-`results/local_2026-11-09_n100.jsonl`, whose SHA-256 it checks:
+Figures. `figures/build_all.sh` builds Figures 1 to 3 and the graphical abstract (PDF, and PNG and TIFF at 600 dpi)
+into `figures/out/` or into the folder given as its argument. It reads only the four sources in `figures/` and, for
+Figure 3, `results/local_2026-11-09_n100.jsonl`, whose SHA-256 it checks. It first checks that its tools are present,
+and uses `sha256sum` or, if that is missing, `shasum -a 256`:
 
 ```bash
 python3 -m pip install -r figures/requirements.txt
-bash figures/build_all.sh
+bash figures/build_all.sh out/figures
 ```
 
 Figures 1 and 2 and the graphical abstract are hand-specified diagrams with no data input. Figure 3 shows only the local
-log of 9 November 2026. On 16 November 2026 (Windows 11, TeX Live 2024, Python 3.12.2, matplotlib 3.10.5) the build
-gave the submitted files byte for byte:
+log of 9 November 2026. The figure sources were redesigned for version 1.1.1, so these hashes differ from those of
+version 1.1.0. On 22 November 2026 (Windows 11, TeX Live 2024 with pdfTeX 1.40.26, pdftoppm 24.03.0, Python 3.12.2,
+matplotlib 3.10.5, numpy 1.26.2, Pillow 11.1.0) two builds into separate folders gave identical files, equal byte for
+byte to the figures of the revised paper:
 
 | Output | SHA-256 |
 |---|---|
-| `Figure_1.pdf` | `0fefcc40d1ba7f974a2f1e17b03b3e6be877d9736583c78f94c899b13f924636` |
-| `Figure_2.pdf` | `86052bc41593626da38707e246d2095c67f8f5302f699e3691b3a27b5617ca7f` |
-| `Figure_3.pdf` | `b78ed8c0efd321807355ecdb235ef04ac9b4302eb5158b3e96081b2b798d6484` |
-| `Graphical_Abstract.pdf` | `915ba31a8ef4a0a65808fa4616aea887047ceea04878152bd39e6d6d0b553475` |
-| `Graphical_Abstract.png` | `8d586ec585a4313168d50cdfd5fb020070390ba396d3564525eb5f78340eac40` |
+| `Figure_1.pdf` | `9d29f6871aeabad100e683c9db450c6badf60620cb8574bc29970bda524afba9` |
+| `Figure_2.pdf` | `7faca7bb3006dd65996bf9d2ddc0df8fa39e9d30ecdb1d79f1f1e4f4f1d74d49` |
+| `Figure_3.pdf` | `1ac2ccff75bd3567f79ce50cb4fe0804ca8e8328b89796dbfad85bd6676fb318` |
+| `Graphical_Abstract.pdf` | `5d88f33e72bbbc052ab6dba02c82bc61c21354ae2f70518b2f808cac250d36db` |
+| `Graphical_Abstract.png` | `169afc6059b7032ec44ffc8ef260ef53a6b27e4419120fd84007c9455eb1c1da` |
+| `Graphical_Abstract.tif` | `15fcff35fc4f8d81a836a10cf19517c557894c95fe8e5754cc43b72dfe62d8b3` |
 | `Figure_3_stats.json` | `1e289ef834457acf6e586e4d90f5d176415422053e1dddb8fa9bb5fb8fd9b4c5` |
 
-`Figure_3_stats.json` is now written with LF line endings; apart from that it equals the file written for the
-submission. Other TeX or font versions may change the PDF bytes but not the statistics.
+`Figure_3_stats.json` is unchanged since version 1.1.0. Other TeX or font versions may change the PDF bytes but not the
+statistics.
 
 What is published. The timed local log of 9 November 2026; the closed Sepolia log of 12 November 2026; the deployment
 record; the output of the unchanged earlier test and the log of the revised harness on the earlier code
 (`results/r2.1_local_comparison/`); the run-day rules (the pre-registration addendum and the run tools) with their
-manifest lines; the run checker and its tests; the final verdict, the checker report and the analysis output; a
-sanitised summary of the network monitor; the figure builders; and the transcript of the test run at the archived
-commit. SHA-256 values are in [`results/README.md`](results/README.md) and `run_day/MANIFEST_SUBSET.sha256`.
+manifest lines and, since version 1.1.1, the full manifest; the run checker and its tests; the final verdict, the
+checker report and the analysis output; a sanitised summary of the network monitor; the figure builders; and the
+transcript of the test run at the archived commit. SHA-256 values are in [`results/README.md`](results/README.md),
+`run_day/MANIFEST_SUBSET.sha256`, `run_day/RUN_DAY_MANIFEST.sha256` and `FROZEN_CODE.sha256`. The full manifest has
+SHA-256 `8a2ff62b04a01042e8a523a240eda58d3eb183841b46d8eb1c40803a9d22e04f`; 21 of its 23 lines can be checked
+against published files, and the other two name the internal planning files below.
 
 What is not published. The raw monitor file and the wrapper log of the run stay with the authors. They hold local
 paths, the range of the default gateway and salted hashes of the gateway and the network name, and the salt was kept
@@ -368,6 +434,15 @@ paths of the authors' laptop and mean nothing elsewhere. Pass your own paths wit
 scripts (`-Artifact`, `-EnvFile`, `-OutDir`). `run_day/tests/test_wrapper.ps1` sets the repository folder in its line 21
 and takes no parameter, so it runs elsewhere only from an edited copy. No file holds a key or an RPC URL path; the test
 files use fake tokens marked `TESTONLY`.
+
+Status line and AI tools in the run-day files. `run_day/RUN_DAY_ADDENDUM_DRAFT.md` and `run_day/RUN_DAY.md` are published
+byte for byte, so they still read as they did when the manifest was hashed (`run_day/RUN_DAY_MANIFEST.sha256`, SHA-256
+`8a2ff62b04a01042e8a523a240eda58d3eb183841b46d8eb1c40803a9d22e04f`). The addendum therefore still calls itself a "candidate
+for written user approval", and its section Q says "Pending: user's written decision". The corresponding author approved this
+exact text with this manifest hash in writing, in the authors' run log, at 07:14 IST on 12 November 2026, and the e-mail that
+carried the manifest hash reached the mail server at 07:18:25 IST. The run log is not published; the editor can ask for it.
+"The user" in these files is the corresponding author. The AI tools Claude and Codex, named in these files, were used for
+final run assistance.
 
 ## Sepolia scripts and secrets
 
@@ -405,20 +480,87 @@ How secrets are handled:
 - The RPC URL is read from the `SEPOLIA_RPC_URL` environment variable or from that single line of the file given with
   `--env` (see [`.env.example`](.env.example)); nothing else in that file is read.
 - The deployer key is a separate JSON file (`{"address": ..., "privateKey": ...}`) given with `--key`. The issuer's
-  Ed25519 key is written once to `--secrets-dir` (default `~/.blockchain-did-vc-secrets`, file mode 600) and never
-  printed; it is needed only until the credentials are signed, and is deleted after the deployment. The subject's key
-  is never stored. The script refuses a key file or secrets folder inside a git working tree.
+  Ed25519 key is written once to `--secrets-dir` (default `~/.blockchain-did-vc-secrets`; file mode 600 on POSIX
+  systems, the access rights of the user profile on Windows) and is never printed. It is needed only until the
+  credentials are signed; the operator then deletes it. The script refuses a key file or secrets folder that git
+  reports to be inside a working tree; if git is not installed it cannot tell. The subject's key is never stored.
 - What the scripts print or log passes through one function that removes the URL and any token-like part of it (user
   information, and host labels, path segments and query values that look like keys; ordinary words such as
   `sepolia` stay) and then scans for key material; a hit stops the write. The deployment record is scanned for the
   deployer key and the URL's secret parts before every save. Errors are reduced to codes. Requests are never retried.
 - The deployment record publishes credentials A and B in full. They are test credentials of the deployment's own
   DIDs; B stays valid for 365 days and, as there is no holder binding, can be presented by anyone who copies it.
+- Credential B is VALID only while the deployer key is unused: its holder can revoke B or deactivate the issuer DID.
+  The deployer nonce was 4 after setup and after the run (deployerNonceAfterSetup in
+  results/sepolia_v1.1_deployment.json); a higher nonce means a later transaction. The key controls a test deployment
+  and holds no value.
+
+## Maintaining this repository
+
+Do not edit or reformat the files that the paper or the deployed contract depends on; add a new file or a new version
+instead:
+
+- `contracts/DIDRegistry.sol`: its bytes, with CRLF line endings, give the deployed bytecode and metadata hash, and
+  its line in the run-day manifest. A changed comment changes the metadata hash.
+- The scripts in the run-day manifest: `scripts/analyze-latency.js`, `scripts/lib/rpc.js`,
+  `scripts/lib/sepolia-modes.js`, `scripts/lib/stats.js` and `scripts/measure-sepolia.js`.
+- The other measurement code of the freeze commit, listed in `FROZEN_CODE.sha256`: `src/vc/vc-service.js`,
+  `src/vc/verifier-service.js`, `scripts/measure-local.js`, `scripts/lib/fixtures.js`, `scripts/lib/cli.js`,
+  `scripts/deploy-sepolia.js`, `hardhat.config.js`, `package.json` and `package-lock.json` (so their version field
+  stays 1.1.0).
+- `test/`: the paper counts its 164 tests at commit `73b4cca16e7c`.
+- Everything in `run_day/` (only the comment header of `MANIFEST_SUBSET.sha256` may change; its entry lines copy the
+  manifest) and
+  the logs, records and run outputs in `results/` and `test-transcripts/`.
+
+Check them offline: `sha256sum run_day/RUN_DAY_MANIFEST.sha256` (8a2ff62b...), the lines of
+`run_day/MANIFEST_SUBSET.sha256` and of `FROZEN_CODE.sha256` (each file states its check command; in a clone made
+with core.autocrlf=true the scripts have CRLF endings and their lines do not match, so clone with
+`git clone -c core.autocrlf=false`), and
+`node run_day/tests/test_consistency.js "$(pwd)"`. `test/GasSchedule.test.js` parses the gas tables of this file, of
+`results/README.md` and of `CHANGELOG.md`; keep their row labels ("Deployment (13,752 bytes of code)", the two
+`createDID` rows and the `revokeCredential` row), or `npm test` fails with a message about gas.
+
+How the code depends on itself (A <- B: B loads A):
+
+- `src/vc/vc-service.js` (issue, sign, canonicalise) <- `src/vc/verifier-service.js` (B0, V1 to V8, error codes) <-
+  `scripts/lib/rpc.js` (URL redaction, sockets, request counter, which imports `errorCode` from the verifier) <-
+  `scripts/lib/sepolia-modes.js` (modes P, S, C, Bt) <- `scripts/measure-sepolia.js`, which also loads the verifier,
+  `rpc.js` and `scripts/lib/cli.js`.
+- `scripts/lib/stats.js` <- `scripts/analyze-latency.js` <- `run_day/analysis_primary.js`, which loads both by path.
+- `scripts/lib/rpc.js` and `scripts/lib/sepolia-modes.js` <- `run_day/check_sepolia_run.js`; `scripts/lib/rpc.js`
+  and `src/vc/verifier-service.js` <- `run_day/preflight_chain.js`. So a change in the verifier or the RPC helpers
+  changes what the pre-registered run tools accept.
+- `src/vc/vc-service.js` <- `scripts/lib/fixtures.js` <- `scripts/measure-gas.js`, `scripts/measure-local.js` and
+  `scripts/deploy-sepolia.js`.
+- `scripts/deploy-sepolia.js` is a resumable state machine (one step per transaction) with its own record file. The
+  run_day files repeat the pre-registered constants (slots, dates, commit, versions, hashes) on purpose;
+  `test_consistency.js` fails if one copy changes.
 
 ## Limits
 
 - The verifier trusts the answers of its RPC provider. It checks the chain as of block N: it cannot see a change after
   N, or a reorganisation that replaces N.
+- B0 does not check the format of the `eth_blockNumber` reply: a malformed reply is not rejected; the provider is
+  trusted. A reply with no leading hexadecimal digit (for example "garbage" or "0x") gives `checkedAtBlock` NaN
+  (written as `null` in JSON) and the reads are sent for block 0, which fail against a real chain; a provider that
+  ignores the block tag can then still return `VALID`; other malformed replies are read up to their first
+  non-hexadecimal character. The verifier does not check `eth_chainId` or the code at the registry address.
+- The verifier is stateless and sequential: each credential costs one `eth_blockNumber` and four `eth_call` requests
+  (about 0.6 s on Sepolia over one provider in the paper's run, so about 1.6 credentials per second per worker). It
+  does not share the issuer reads between credentials, and no throughput or provider rate-limit test was made.
+- The verifier sets no length limit on the unauthenticated `issuer`, `credentialSubject.id`, `id` and
+  `proof.verificationMethod`; the issuer and subject identifiers are sent to the provider at V2, V3 and V5 before the
+  signature is checked, so a presenter can make the verifier send large requests.
+- Dates: `validFrom` and `validUntil` take a date, a time and a time zone as accepted by JavaScript Date.parse; the
+  check does not enforce the XML Schema limits for year 0000 or for offsets beyond 14:00.
+- `issueCredential` builds `credentialSubject` as `{ id: subjectDid, ...claims }`, so a claim named `id` replaces the
+  subject DID; do not pass `id` among the claims.
+- The RPC helpers accept an `http://` URL for any host, so an API key in the URL would travel unencrypted; use an
+  `https://` URL.
+- `measure-sepolia.js` schedules its ten blocks (08:00 to 20:00) in the machine's local time, although its header
+  calls the schedule IST; run it on a machine set to IST (UTC+05:30) to repeat the paper's schedule. The header row
+  of the log records `timezoneOffsetMinutes`.
 - Everything the registry stores is public: DID documents, controllers, delegates, attributes and revocation entries
   with their reason codes.
 - `did:smid` is this artifact's method name. It has no method specification and is not in the W3C list of DID methods,
@@ -429,10 +571,17 @@ How secrets are handled:
   relying party's decision, outside the verifier.
 - The registry has no `assertionMethod` relationship: any verification method of the issuer's document can sign
   credentials.
+- `rotateKey` and `updateDID` store the string they are given. The verifier reads each entry as the JSON of a
+  verification method, so pass the whole JSON (id, type, controller, publicKeyMultibase), not the bare key; an entry
+  that is not that JSON makes every credential of the DID fail at V5.
 - Administrators can pause the registry for as long as they like. A pause also stops key rotation, controller changes
   and reactivation, so during a pause the only remedy for a leaked key is to deactivate the DID. The owner can never be
   removed or replaced, so a compromised owner key can keep these functions paused.
+- `deactivateDID` can be called again on a deactivated DID: it emits a second `DIDDeactivated` and moves `updated`.
+  `addAdmin` and `removeAdmin` emit their events also when nothing changes, so read `isAdmin` for the state.
 - Delegates are recorded but grant no permission in this contract.
+- `nonces(address)` is never written and returns 0; the per-DID nonce is a change counter that no function checks.
+  Neither is replay protection, although comments in the contract call them so.
 - An address's list of DIDs grows only through its own actions (creating a DID or accepting one). The address that
   accepts a handover pays for a search through the previous controller's list, which grows with that list.
 - A handover proposal does not expire. It survives `updateDID`, `rotateKey`, revocations and a pause, and ends only
@@ -441,8 +590,25 @@ How secrets are handled:
   against a stolen controller key, whose holder can propose and accept an address of their own. After a handover the
   DID keeps its delegates and attributes, and the new controller can revoke every credential issued under the DID,
   including those issued before the handover.
+- A handover moves control of the registry record only. It does not rotate the verification methods, so a former
+  controller that still holds the issuer's signing key can keep issuing credentials that verify until the new
+  controller calls rotateKey.
 - `rotateKey` replaces one entry of the verification methods, so a key listed twice stays usable through the other
   entry.
+- No test covers removeAdmin(owner), reactivateDID on an active DID, the empty-identifier check, or the delegate and
+  attribute success paths; the first three were checked by hand.
+- The test "Should use reasonable gas for DID creation" uses the version 1.0.0 placeholder inputs and a loose bound;
+  the exact gas is pinned by `GasSchedule.test.js`. The run-day tests and the mutation run in `run_day/tests/` are not
+  part of `npm test`.
+- `scripts/lib/stats.js` is meant for logs of up to a few thousand rows: the interval computation grows quadratically
+  (0.2 s at 10,000 rows, 18 s at 50,000) and the minimum and maximum fail above about 125,000 rows.
+- Dependencies: the locked toolchain (Hardhat 2.29.0, ethers 5.8.0) was frozen for the measurements and has not been
+  updated. On 22 November 2026 `npm audit --omit=dev` reported 15 vulnerable packages (12 low, 2 moderate, 1 high)
+  in the run-time dependency ethers 5.8.0 and its packages, all from three advisories: GHSA-848j-6mx2-7j84 (low) in
+  `elliptic` 6.6.1 and GHSA-58qx-3vcg-4xpx (moderate) and GHSA-96hv-2xvq-fx4p (high) in `ws` 8.18.0, which ethers
+  loads for its WebSocket provider; this artifact uses JSON-RPC over HTTP(S) and never WebSocket. `npm audit` for
+  the whole tree reported 69 vulnerable packages (28 low, 23 moderate, 15 high, 3 critical) from 66 advisories, the
+  others in development tools. The fixes npm offers need major upgrades.
 - The contract has not been audited by a third party.
 
 ## Standards
@@ -455,11 +621,27 @@ How secrets are handled:
 
 ## Citing
 
-Please cite the archived release of version 1.1.0, DOI
-[10.5281/zenodo.24263442](https://doi.org/10.5281/zenodo.24263442), or use [`CITATION.cff`](CITATION.cff). Once the
-paper is published, please cite the paper as the primary reference. Version 1.0.0 (DOI 10.5281/zenodo.21515958) is
-superseded by this version.
+Please cite the archived release of version 1.1.1, DOI
+[10.5281/zenodo.24451811](https://doi.org/10.5281/zenodo.24451811), or use [`CITATION.cff`](CITATION.cff). The concept DOI
+[10.5281/zenodo.21515957](https://doi.org/10.5281/zenodo.21515957) stands for all versions and resolves to the newest.
+Once the paper is published, please cite the paper as the primary reference. Version 1.1.0 (DOI
+[10.5281/zenodo.24263442](https://doi.org/10.5281/zenodo.24263442)) has the same contract, code, tests and logs;
+version 1.0.0 (DOI 10.5281/zenodo.21515958) is superseded. The Zenodo record is authoritative for the metadata
+(authors, affiliations, licence, related identifiers); `.zenodo.json` copies it, and `CITATION.cff` gives the
+affiliations as on the paper's title page.
+
+## Contact
+
+Questions and defects: open an issue at https://github.com/Vineeta-Rathore/blockchain-did-vc/issues. The corresponding
+author's address is the one on the paper's title page.
 
 ## Licence
 
-MIT, see [`LICENSE`](LICENSE).
+The code, the logs and results, the figure sources and the documentation are released under the MIT licence, see
+[`LICENSE`](LICENSE), unless a file says otherwise; the W3C test vector named below is not covered by it.
+
+`test/fixtures/eddsa-jcs-2022-B3.json` reproduces the example key pair, document, proof options and expected values of
+appendix B.3 (Representation: eddsa-jcs-2022) of the W3C Recommendation "Data Integrity EdDSA Cryptosuites v1.0" of
+15 May 2025, https://www.w3.org/TR/2025/REC-vc-di-eddsa-20250515/, Copyright (c) 2025 World Wide Web Consortium,
+used under the W3C Software and Document Notice and License (https://www.w3.org/copyright/software-license-2023/).
+The key in it is the specification's published test key, not a secret.

@@ -23,3 +23,6 @@ Thumbs.db
 
 # Figure build output (bash figures/build_all.sh)
 figures/out/
+
+# Output of the commands in README.md (never written to results/)
+/out/
